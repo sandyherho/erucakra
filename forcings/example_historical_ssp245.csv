@@ -1,0 +1,23 @@
+# Example forcing file: Historical + SSP2-4.5
+# Time: years from 1750
+# Forcing: W/m² (effective radiative forcing)
+time,forcing
+0,0.0
+50,0.15
+100,0.35
+150,0.85
+200,1.25
+220,1.55
+230,1.95
+240,2.25
+250,2.85
+260,3.45
+270,3.95
+280,4.25
+290,4.45
+300,4.55
+310,4.60
+320,4.62
+330,4.64
+340,4.66
+350,4.68

@@ -1,0 +1,13 @@
+# SSP3-7.0: Regional Rivalry Configuration
+scenario:
+  key: ssp370
+  name: "SSP3-7.0: Regional Rivalry"
+  subtitle: 'Fragmented Action — "A Rocky Road"'
+  expected_outcome: TIPPING
+  description: "Delayed action leads to threshold crossing and regime shift"
+visualization:
+  color_primary: "#FF6B35"
+  color_secondary: "#FF4444"
+  color_trajectory: "#FF8855"
+  color_forcing: "#FF2200"
+  cmap_name: inferno

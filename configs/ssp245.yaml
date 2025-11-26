@@ -1,0 +1,13 @@
+# SSP2-4.5: Middle of the Road Configuration
+scenario:
+  key: ssp245
+  name: "SSP2-4.5: Middle Road"
+  subtitle: 'Moderate Action — "Muddling Through"'
+  expected_outcome: MARGINAL
+  description: "System hovers near threshold — outcome uncertain"
+visualization:
+  color_primary: "#FFD700"
+  color_secondary: "#FFA500"
+  color_trajectory: "#FFFF00"
+  color_forcing: "#FF8C00"
+  cmap_name: plasma

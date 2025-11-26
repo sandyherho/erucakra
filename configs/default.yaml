@@ -1,0 +1,87 @@
+# erucakra Default Configuration
+# ==============================
+# Climate Tipping Point Dynamics Model
+
+scenarios:
+  # Default scenario when none specified
+  default: ssp245
+  
+  # Available built-in scenarios
+  available:
+    - ssp126   # SSP1-2.6: Sustainability
+    - ssp245   # SSP2-4.5: Middle Road
+    - ssp370   # SSP3-7.0: Regional Rivalry
+    - ssp585   # SSP5-8.5: Fossil Development
+    - overshoot  # Overshoot & Return
+
+model:
+  # Damping coefficient (energy dissipation)
+  damping: 0.2
+  
+  # Timescale separation (slow/fast ratio)
+  epsilon: 0.02
+  
+  # Feedback strength (variability -> accumulation)
+  beta: 0.8
+  
+  # Critical threshold (~1.5°C warming)
+  z_critical: 1.0
+
+simulation:
+  # Time parameters
+  t_start: 0.0
+  t_end: 150.0  # ~120 years (2020-2140)
+  n_points: 12000
+  
+  # Initial state [x, y, z]
+  initial_state: [0.05, 0.0, 0.3]
+  
+  # Climate noise
+  add_noise: true
+  noise_level: 0.03
+  noise_smoothing: 15.0
+  
+  # ODE solver
+  rtol: 1.0e-10
+  atol: 1.0e-12
+  method: RK45
+
+outputs:
+  # Output formats to generate
+  formats:
+    - csv
+    - netcdf
+    - gif
+    - png
+  
+  # Base output directory
+  base_dir: ./outputs
+  
+  # Subdirectory names by format
+  subdirs:
+    csv: csv
+    netcdf: netcdf
+    gif: gif
+    png: png
+
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR
+  level: INFO
+  
+  # Log directory
+  log_dir: ./logs
+  
+  # Include timestamp in log filename
+  include_timestamp: true
+  
+  # Format: detailed, simple, minimal
+  format_style: detailed
+
+visualization:
+  # Time series plot
+  timeseries_dpi: 200
+  
+  # Phase space GIF
+  gif_fps: 30
+  gif_duration: 12  # seconds
+  gif_dpi: 100

@@ -1,0 +1,13 @@
+# SSP5-8.5: Fossil-fueled Development Configuration
+scenario:
+  key: ssp585
+  name: "SSP5-8.5: Fossil Development"
+  subtitle: 'No Mitigation — "Highway to Warming"'
+  expected_outcome: CATASTROPHIC
+  description: "Multiple tipping points crossed — chaotic high-amplitude regime"
+visualization:
+  color_primary: "#FF0066"
+  color_secondary: "#CC0044"
+  color_trajectory: "#FF3388"
+  color_forcing: "#AA0033"
+  cmap_name: magma

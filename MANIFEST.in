@@ -1,0 +1,7 @@
+include LICENSE
+include README.md
+include pyproject.toml
+recursive-include src/erucakra *.py
+recursive-include configs *.yaml
+recursive-include forcings *.csv *.txt *.md
+recursive-include tests *.py
