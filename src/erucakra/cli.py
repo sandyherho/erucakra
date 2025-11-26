@@ -227,8 +227,8 @@ def run(ctx, scenario, all_scenarios, forcing, output_dir, outputs, t_end, n_poi
     click.echo(f"\n{'=' * 70}")
     click.echo("  COMPLETE - All outputs generated successfully!")
     click.echo(f"{'=' * 70}")
-    click.echo(f"\n📁 Output Directory: {output_dir}")
-    click.echo(f"📋 Log Directory: {log_dir}\n")
+    click.echo(f"\nOutput Directory: {output_dir}")
+    click.echo(f"Log Directory: {log_dir}\n")
 
 
 @main.command("list")
