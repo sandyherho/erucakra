@@ -17,7 +17,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "damping": 0.2,
         "epsilon": 0.02,
         "beta": 0.8,
-        "z_critical": 1.0,
+        "threshold_fraction": 0.7,
     },
     "simulation": {
         "t_start": 0.0,

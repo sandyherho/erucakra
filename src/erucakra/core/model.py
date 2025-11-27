@@ -46,7 +46,7 @@ def _get_logging_utils():
 
 class ClimateModel:
     """
-    Climate Tipping Point Model with enhanced logging and error tracking.
+    Climate Tipping Point Model with threshold_fraction-based z_crit computation.
     
     A three-variable dynamical system modeling climate tipping points
     with time-dependent radiative forcing from SSP scenarios.
@@ -54,6 +54,11 @@ class ClimateModel:
     The model exhibits a pitchfork bifurcation when the slow variable z
     crosses the critical threshold z_crit, transitioning from a stable
     single-well potential to a bistable double-well configuration.
+    
+    Key Design Principle:
+        z_crit is computed from forcing data characteristics using threshold_fraction,
+        not prescribed per scenario. This ensures the model discovers tipping behavior
+        from physics rather than imposing expected outcomes.
     
     Parameters
     ----------
@@ -70,14 +75,21 @@ class ClimateModel:
         Higher values = stronger negative feedback from x oscillations.
         Typical range: 0.5-1.5. Default is 0.8.
     z_crit : float, optional
-        Critical threshold for tipping. If None, uses scenario-specific
-        defaults that produce expected behavior (STABLE, MARGINAL, etc.).
-        Default is None (auto-select based on scenario).
+        Critical threshold for tipping. If None (default), z_crit is
+        computed automatically from forcing data using threshold_fraction.
+    threshold_fraction : float, optional
+        Fraction of max normalized forcing used to compute z_crit.
+        z_crit = threshold_fraction × max(A_normalized)
+        Lower values = tips earlier (more sensitive).
+        Higher values = tips later (less sensitive).
+        Default is 0.7.
     
     Attributes
     ----------
     params : dict
         Model parameters.
+    threshold_fraction : float
+        Fraction used for z_crit computation.
     """
     
     def __init__(
@@ -86,15 +98,18 @@ class ClimateModel:
         epsilon: float = 0.02,
         beta: float = 0.8,
         z_crit: Optional[float] = None,
+        threshold_fraction: float = 0.7,
     ):
         self.params = {
             "c": c,
             "epsilon": epsilon,
             "beta": beta,
-            "z_crit": z_crit,  # None means auto-select
+            "z_crit": z_crit,  # None means auto-compute from threshold_fraction
         }
+        self.threshold_fraction = threshold_fraction
         self._validate_params()
-        logger.info(f"Initialized ClimateModel with params: {self.params}")
+        logger.info(f"Initialized ClimateModel with params: {self.params}, "
+                   f"threshold_fraction={threshold_fraction}")
     
     def _validate_params(self) -> None:
         """Validate model parameters are in physically reasonable ranges."""
@@ -125,28 +140,81 @@ class ClimateModel:
         if z_crit is not None and z_crit <= 0:
             raise ValueError(f"z_crit must be positive, got {z_crit}")
         
+        if not 0 < self.threshold_fraction < 1.5:
+            msg = f"threshold_fraction={self.threshold_fraction} outside typical range (0, 1.5)"
+            logger.warning(msg)
+            issues.append(msg)
+        
         if issues:
             log_calculation_issue(
                 "Parameter validation",
                 "Some parameters outside typical ranges",
-                {"c": c, "epsilon": epsilon, "beta": beta, "z_crit": z_crit}
+                {"c": c, "epsilon": epsilon, "beta": beta, "z_crit": z_crit,
+                 "threshold_fraction": self.threshold_fraction}
             )
-    
-    def get_z_crit(self, scenario_key: Optional[str] = None) -> float:
-        """Get effective z_crit value."""
-        if self.params["z_crit"] is not None:
-            return self.params["z_crit"]
-        
-        if scenario_key is not None and scenario_key in DEFAULT_Z_CRIT:
-            return DEFAULT_Z_CRIT[scenario_key]
-        
-        return DEFAULT_Z_CRIT.get("custom", 0.80)
     
     def get_A_scale(self, scenario_key: Optional[str] = None) -> float:
         """Get forcing scale for normalization."""
         if scenario_key is not None and scenario_key in FORCING_SCALES:
             return FORCING_SCALES[scenario_key]
         return FORCING_SCALES.get("custom", 5.0)
+    
+    def compute_z_crit(
+        self,
+        A_func: Callable[[float], float],
+        A_scale: float,
+        t_start: float,
+        t_end: float,
+        n_sample: int = 1000,
+    ) -> tuple:
+        """
+        Compute z_crit from forcing data using threshold_fraction.
+        
+        Parameters
+        ----------
+        A_func : Callable
+            Forcing function A(t).
+        A_scale : float
+            Forcing normalization scale.
+        t_start : float
+            Start time.
+        t_end : float
+            End time.
+        n_sample : int
+            Number of points to sample forcing.
+        
+        Returns
+        -------
+        tuple
+            (z_crit, forcing_analysis_dict)
+        """
+        # Sample forcing over the simulation period
+        t_sample = np.linspace(t_start, t_end, n_sample)
+        A_sample = np.array([A_func(t) for t in t_sample])
+        
+        # Compute normalized forcing
+        A_normalized = A_sample / A_scale
+        A_normalized_max = np.max(A_normalized)
+        A_normalized_min = np.min(A_normalized)
+        
+        # Compute z_crit as fraction of max normalized forcing
+        z_crit = self.threshold_fraction * A_normalized_max
+        
+        # Store forcing analysis for metadata
+        forcing_analysis = {
+            "A_max": float(np.max(A_sample)),
+            "A_min": float(np.min(A_sample)),
+            "A_mean": float(np.mean(A_sample)),
+            "A_scale": A_scale,
+            "A_normalized_max": float(A_normalized_max),
+            "A_normalized_min": float(A_normalized_min),
+            "threshold_fraction": self.threshold_fraction,
+            "z_crit_computed": float(z_crit),
+        }
+        
+        logger.info(f"Computed z_crit = {self.threshold_fraction:.2f} × {A_normalized_max:.3f} = {z_crit:.3f}")
+        
+        return z_crit, forcing_analysis
     
     def run(
         self,
@@ -168,15 +236,69 @@ class ClimateModel:
         show_progress: bool = True,
         z_crit_override: Optional[float] = None,
         A_scale_override: Optional[float] = None,
+        threshold_fraction_override: Optional[float] = None,
     ) -> SimulationResults:
         """
         Run the climate tipping point simulation with comprehensive logging.
         
         All steps are timed and logged. Any calculation issues (NaN, Inf, etc.)
         are detected and logged for debugging.
+        
+        Parameters
+        ----------
+        scenario : str, optional
+            Built-in scenario key (ssp126, ssp245, ssp370, ssp585).
+        forcing : Callable or NDArray, optional
+            Custom forcing function or array.
+        forcing_times : NDArray, optional
+            Times for custom forcing array.
+        t_start : float
+            Start time (normalized). Default 0.0.
+        t_end : float
+            End time (normalized). Default 600.0.
+        n_points : int
+            Number of output points. Default 48000.
+        initial_state : tuple
+            Initial (x, y, z) state. Default (0.05, 0.0, 0.3).
+        add_noise : bool
+            Add climate noise. Default True.
+        noise_level : float
+            Noise amplitude. Default 0.03.
+        noise_smoothing : float
+            Noise smoothing sigma. Default 15.0.
+        noise_color : str
+            Noise type: 'red', 'white', 'pink'. Default 'red'.
+        rtol : float
+            Relative tolerance. Default 1e-10.
+        atol : float
+            Absolute tolerance. Default 1e-12.
+        method : str
+            ODE solver method. Default 'RK45'.
+        seed : int, optional
+            Random seed for reproducibility.
+        show_progress : bool
+            Show progress bars. Default True.
+        z_crit_override : float, optional
+            Override computed z_crit with this value.
+        A_scale_override : float, optional
+            Override default A_scale.
+        threshold_fraction_override : float, optional
+            Override model's threshold_fraction for this run.
+        
+        Returns
+        -------
+        SimulationResults
+            Container with all simulation results and metadata.
         """
         # Get logging utilities
         start_step, end_step, log_error, log_calculation_issue = _get_logging_utils()
+        
+        # Use override threshold_fraction if provided
+        effective_threshold_fraction = (
+            threshold_fraction_override 
+            if threshold_fraction_override is not None 
+            else self.threshold_fraction
+        )
         
         # =====================================================================
         # STEP 1: Setup and Parameter Resolution
@@ -190,20 +312,7 @@ class ClimateModel:
             # Determine scenario key for defaults
             scenario_key = scenario if scenario else "custom"
             
-            # Get effective z_crit and A_scale
-            if z_crit_override is not None:
-                z_crit = z_crit_override
-            else:
-                z_crit = self.get_z_crit(scenario_key)
-            
-            if A_scale_override is not None:
-                A_scale = A_scale_override
-            else:
-                A_scale = self.get_A_scale(scenario_key)
-            
-            logger.info(f"Using z_crit={z_crit:.3f}, A_scale={A_scale:.2f} W/m²")
-            
-            # Get forcing function
+            # Get forcing function first (needed to compute z_crit)
             scenario_info = None
             if scenario is not None:
                 scenario_info = get_scenario(scenario)
@@ -219,6 +328,33 @@ class ClimateModel:
                 logger.info("Using custom forcing")
             else:
                 raise ValueError("Must provide either scenario or forcing")
+            
+            # Get A_scale
+            if A_scale_override is not None:
+                A_scale = A_scale_override
+            else:
+                A_scale = self.get_A_scale(scenario_key)
+            
+            # Compute or get z_crit
+            forcing_analysis = None
+            if z_crit_override is not None:
+                z_crit = z_crit_override
+                logger.info(f"Using z_crit override: {z_crit:.3f}")
+            elif self.params["z_crit"] is not None:
+                z_crit = self.params["z_crit"]
+                logger.info(f"Using preset z_crit: {z_crit:.3f}")
+            else:
+                # Compute z_crit from forcing data
+                z_crit, forcing_analysis = self.compute_z_crit(
+                    A_func, A_scale, t_start, t_end
+                )
+                # Update forcing_analysis with effective threshold_fraction
+                if forcing_analysis:
+                    forcing_analysis["threshold_fraction"] = effective_threshold_fraction
+                    z_crit = effective_threshold_fraction * forcing_analysis["A_normalized_max"]
+                    forcing_analysis["z_crit_computed"] = float(z_crit)
+            
+            logger.info(f"Using z_crit={z_crit:.3f}, A_scale={A_scale:.2f} W/m²")
             
             # Time evaluation points
             t_eval = np.linspace(t_start, t_end, n_points)
@@ -445,6 +581,9 @@ class ClimateModel:
             final_z = float(y[2, -1])
             max_variability = float(np.nanmax(np.abs(y[0])))
             
+            # Binary tipped status
+            tipped = bool(np.any(above_threshold))
+            
             if max_z > 10:
                 log_calculation_issue(
                     "Extreme z value",
@@ -460,8 +599,8 @@ class ClimateModel:
                 )
             
             logger.info(f"Time above threshold: {time_above_pct:.1f}%")
-            logger.info(f"Max z: {max_z:.4f}")
-            logger.info(f"Final z: {final_z:.4f}")
+            logger.info(f"Max z: {max_z:.4f}, z_crit: {z_crit:.4f}")
+            logger.info(f"Tipped: {tipped}")
             
             if first_crossing_year:
                 logger.info(f"First threshold crossing: Year {int(first_crossing_year)}")
@@ -495,6 +634,7 @@ class ClimateModel:
                     **self.params,
                     "z_crit_effective": z_crit,
                     "A_scale": A_scale,
+                    "threshold_fraction": effective_threshold_fraction,
                 },
                 simulation_params={
                     "t_start": t_start,
@@ -514,11 +654,13 @@ class ClimateModel:
                     "max_z": max_z,
                     "final_z": final_z,
                     "max_variability": max_variability,
+                    "tipped": tipped,
                 },
+                forcing_analysis=forcing_analysis,
             )
             
             logger.info(f"Simulation complete. Max z={results.diagnostics['max_z']:.3f}, "
-                       f"crossed={results.crossed_threshold}")
+                       f"tipped={results.tipped}")
             
             end_step(success=True)
             
@@ -592,36 +734,56 @@ class ClimateModel:
     def sensitivity_analysis(
         self,
         scenario: str,
-        z_crit_range: tuple = (0.5, 1.2),
+        threshold_fraction_range: tuple = (0.5, 0.9),
         n_samples: int = 10,
         **run_kwargs,
     ) -> list:
         """
-        Run sensitivity analysis over z_crit values.
+        Run sensitivity analysis over threshold_fraction values.
+        
+        Parameters
+        ----------
+        scenario : str
+            Scenario to analyze.
+        threshold_fraction_range : tuple
+            (min, max) threshold_fraction values to test.
+        n_samples : int
+            Number of samples.
+        **run_kwargs
+            Additional arguments passed to run().
+        
+        Returns
+        -------
+        list
+            List of (threshold_fraction, SimulationResults) tuples.
         """
         start_step, end_step, log_error, log_calculation_issue = _get_logging_utils()
         
         start_step(f"Sensitivity analysis: {scenario}")
         
         try:
-            z_crit_values = np.linspace(z_crit_range[0], z_crit_range[1], n_samples)
+            tf_values = np.linspace(
+                threshold_fraction_range[0], 
+                threshold_fraction_range[1], 
+                n_samples
+            )
             results_list = []
             
-            for i, z_crit in enumerate(tqdm(z_crit_values, desc="Sensitivity analysis")):
-                logger.debug(f"Running sensitivity sample {i+1}/{n_samples}: z_crit={z_crit:.3f}")
+            for i, tf in enumerate(tqdm(tf_values, desc="Sensitivity analysis")):
+                logger.debug(f"Running sensitivity sample {i+1}/{n_samples}: threshold_fraction={tf:.3f}")
                 
                 try:
                     results = self.run(
                         scenario=scenario,
-                        z_crit_override=z_crit,
+                        threshold_fraction_override=tf,
                         show_progress=False,
                         **run_kwargs,
                     )
-                    results_list.append((z_crit, results))
+                    results_list.append((tf, results))
                     
                 except Exception as e:
-                    log_error(e, f"Sensitivity sample z_crit={z_crit:.3f}")
-                    results_list.append((z_crit, None))
+                    log_error(e, f"Sensitivity sample threshold_fraction={tf:.3f}")
+                    results_list.append((tf, None))
             
             end_step(success=True)
             return results_list
@@ -634,4 +796,5 @@ class ClimateModel:
     def __repr__(self) -> str:
         z_crit_str = f"{self.params['z_crit']}" if self.params['z_crit'] else "auto"
         return (f"ClimateModel(c={self.params['c']}, epsilon={self.params['epsilon']}, "
-                f"beta={self.params['beta']}, z_crit={z_crit_str})")
+                f"beta={self.params['beta']}, z_crit={z_crit_str}, "
+                f"threshold_fraction={self.threshold_fraction})")

@@ -45,6 +45,7 @@ def create_timeseries_plot(
     info = results.scenario_info or {}
     z_crit = results.z_crit
     A_scale = results.A_scale
+    threshold_fraction = results.threshold_fraction
     
     plt.style.use("dark_background")
     fig = plt.figure(figsize=(16, 13))
@@ -95,7 +96,7 @@ def create_timeseries_plot(
     
     ax2.plot(results.year, results.z, color="white", lw=2.5, label="System State (z)")
     ax2.axhline(z_crit, color="#FF3333", alpha=0.9, linestyle="--", lw=2.5, 
-                label=f"z_crit = {z_crit:.3f} (computed)")
+                label=f"z_crit = {z_crit:.3f}")
     
     z_max = max(z_crit + 0.5, results.z.max() + 0.2)
     z_min = min(-0.1, results.z.min() - 0.1)
@@ -166,7 +167,7 @@ def create_timeseries_plot(
     
     # Parameters box
     params_text = (
-        f"Parameters:  threshold_fraction = {results.threshold_fraction:.2f}  |  "
+        f"Parameters:  threshold_fraction = {threshold_fraction:.2f}  |  "
         f"ε = {results.model_params.get('epsilon', 0.02)}  |  "
         f"c = {results.model_params.get('c', 0.2)}  |  "
         f"β = {results.model_params.get('beta', 0.8)}"
@@ -179,7 +180,11 @@ def create_timeseries_plot(
     )
     
     # Computed values
-    computed_text = f"Computed: z_crit = {z_crit:.3f}  |  A_scale = {A_scale:.1f} W/m²"
+    A_norm_max = float(np.max(results.A_normalized))
+    computed_text = (
+        f"Computed: z_crit = {threshold_fraction:.2f} × {A_norm_max:.3f} = {z_crit:.3f}  |  "
+        f"A_scale = {A_scale:.1f} W/m²"
+    )
     ax4.text(
         0.5, 0.65, computed_text,
         transform=ax4.transAxes, fontsize=10, color="#AAAAAA",

@@ -47,6 +47,8 @@ class SimulationResults:
         Simulation parameters used.
     diagnostics : dict
         Pre-computed diagnostic quantities.
+    forcing_analysis : dict, optional
+        Analysis of forcing data used to compute z_crit.
     """
     
     t: NDArray[np.float64]
@@ -63,6 +65,7 @@ class SimulationResults:
     model_params: Dict[str, Any] = field(default_factory=dict)
     simulation_params: Dict[str, Any] = field(default_factory=dict)
     diagnostics: Dict[str, Any] = field(default_factory=dict)
+    forcing_analysis: Optional[Dict[str, Any]] = None
     
     @property
     def z_crit(self) -> float:
@@ -75,6 +78,11 @@ class SimulationResults:
         return self.model_params.get("A_scale", 1.0)
     
     @property
+    def threshold_fraction(self) -> float:
+        """Threshold fraction used to compute z_crit."""
+        return self.model_params.get("threshold_fraction", 0.7)
+    
+    @property
     def velocity(self) -> NDArray[np.float64]:
         """Phase space velocity magnitude sqrt(x² + y²)."""
         return np.sqrt(self.x**2 + self.y**2)
@@ -82,7 +90,7 @@ class SimulationResults:
     @property
     def regime(self) -> NDArray[np.str_]:
         """Climate regime classification based on z vs z_crit."""
-        return np.where(self.z > self.z_crit, "tipped", "stable")
+        return np.where(self.z > self.z_crit, "tipped", "not_tipped")
     
     @property
     def max_z(self) -> float:
@@ -97,8 +105,13 @@ class SimulationResults:
     
     @property
     def crossed_threshold(self) -> bool:
-        """Whether the tipping threshold was crossed."""
+        """Whether the tipping threshold was ever crossed."""
         return bool(np.any(self.z > self.z_crit))
+    
+    @property
+    def tipped(self) -> bool:
+        """Whether the system tipped (z exceeded z_crit at any point)."""
+        return self.diagnostics.get("tipped", self.crossed_threshold)
     
     @property
     def first_crossing_year(self) -> Optional[float]:
@@ -116,6 +129,7 @@ class SimulationResults:
             "scenario": self.scenario_key,
             "name": self.scenario_info.get("name", "Custom") if self.scenario_info else "Custom",
             "expected_outcome": self.scenario_info.get("expected_outcome", "N/A") if self.scenario_info else "N/A",
+            "threshold_fraction": self.threshold_fraction,
             "z_crit": self.z_crit,
             "A_scale": self.A_scale,
             "max_z": self.max_z,
@@ -124,6 +138,7 @@ class SimulationResults:
             "max_A_normalized": float(np.max(self.A_normalized)),
             "time_above_threshold_pct": self.time_above_threshold,
             "crossed_threshold": self.crossed_threshold,
+            "tipped": self.tipped,
             "first_crossing_year": self.first_crossing_year,
             "max_variability": self.diagnostics.get("max_variability", float(np.max(np.abs(self.x)))),
             "year_start": int(np.round(self.year[0])),
@@ -145,7 +160,7 @@ class SimulationResults:
         
         events = []
         
-        # Upward crossings (stable → tipped)
+        # Upward crossings (not_tipped → tipped)
         up_indices = np.where(transitions > 0)[0]
         for idx in up_indices:
             events.append({
@@ -156,7 +171,7 @@ class SimulationResults:
                 "type": "tipping",
             })
         
-        # Downward crossings (tipped → stable)
+        # Downward crossings (tipped → not_tipped)
         down_indices = np.where(transitions < 0)[0]
         for idx in down_indices:
             events.append({
@@ -276,10 +291,11 @@ class SimulationResults:
     
     def __repr__(self) -> str:
         name = self.scenario_info.get("name", "Custom") if self.scenario_info else "Custom"
-        status = "TIPPED" if self.crossed_threshold else "STABLE"
+        status = "TIPPED" if self.tipped else "NOT_TIPPED"
         return (
             f"SimulationResults(scenario='{name}', "
             f"years={int(np.round(self.year[0]))}-{int(np.round(self.year[-1]))}, "
-            f"z_crit={self.z_crit:.2f}, max_z={self.max_z:.3f}, "
+            f"threshold_fraction={self.threshold_fraction:.2f}, "
+            f"z_crit={self.z_crit:.3f}, max_z={self.max_z:.3f}, "
             f"status={status})"
         )

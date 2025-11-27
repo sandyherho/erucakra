@@ -74,6 +74,7 @@ def create_phase_space_gif(
     info = results.scenario_info or {}
     scenario_key = results.scenario_key or "default"
     z_crit = results.z_crit
+    threshold_fraction = results.threshold_fraction
     
     total_frames = fps * duration_seconds
     
@@ -193,9 +194,10 @@ def create_phase_space_gif(
         transform=ax.transAxes, fontsize=12, ha="right", fontweight="bold",
     )
     
+    # Show threshold_fraction in corner
     ax.text2D(
-        0.02, 0.94, f"z_crit = {z_crit:.3f}",
-        transform=ax.transAxes, fontsize=10, color="#FF8888",
+        0.02, 0.94, f"threshold_fraction = {threshold_fraction:.2f}\nz_crit = {z_crit:.3f}",
+        transform=ax.transAxes, fontsize=9, color="#FF8888",
         family="monospace",
     )
     

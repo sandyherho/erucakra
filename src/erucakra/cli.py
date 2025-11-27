@@ -42,7 +42,7 @@ def main(ctx, verbose, debug, config):
     climate tipping points under various SSP scenarios.
     
     The critical threshold z_crit is computed from forcing data,
-    not prescribed per scenario.
+    controlled by --threshold-fraction.
     """
     ctx.ensure_object(dict)
     ctx.obj["config"] = load_config(config)
@@ -83,7 +83,7 @@ def main(ctx, verbose, debug, config):
     "--threshold-fraction", "-tf",
     type=float,
     default=0.7,
-    help="Fraction of max forcing for z_crit (default: 0.7)",
+    help="Fraction of max forcing for z_crit computation (default: 0.7). Lower = tips earlier.",
 )
 @click.option(
     "--t-end",
@@ -179,8 +179,8 @@ def run(ctx, scenario, all_scenarios, forcing, output_dir, outputs, threshold_fr
         click.echo(f"  Damping (c)          = {model.params['c']}")
         click.echo(f"  Timescale (ε)        = {model.params['epsilon']}")
         click.echo(f"  Feedback (β)         = {model.params['beta']}")
-        click.echo(f"  Threshold fraction   = {threshold_fraction}")
-        click.echo(f"  (z_crit computed from forcing data)")
+        click.echo(f"  threshold_fraction   = {threshold_fraction}")
+        click.echo(f"  (z_crit computed as threshold_fraction × max(A_normalized))")
         click.echo(f"{'═' * 60}")
         
         end_step(success=True)
@@ -248,7 +248,9 @@ def run(ctx, scenario, all_scenarios, forcing, output_dir, outputs, threshold_fr
                     base_name = scenario_key
                 
                 # Show computed parameters
-                click.echo(f"  Computed: z_crit = {results.z_crit:.3f}, A_scale = {results.A_scale:.2f} W/m²")
+                click.echo(f"\n  Computed threshold: z_crit = {results.z_crit:.3f}")
+                click.echo(f"  Forcing scale: A_scale = {results.A_scale:.2f} W/m²")
+                click.echo(f"  Max normalized forcing: {results.A_normalized.max():.3f}")
                 click.echo("─" * 60)
                 
                 # Generate Outputs
@@ -281,6 +283,7 @@ def run(ctx, scenario, all_scenarios, forcing, output_dir, outputs, threshold_fr
                 # Summary - binary regime
                 summary = results.summary()
                 click.echo(f"\n  Results Summary:")
+                click.echo(f"    threshold_fraction: {summary['threshold_fraction']:.2f}")
                 click.echo(f"    z_crit (computed): {summary['z_crit']:.3f}")
                 click.echo(f"    Max z: {summary['max_z']:.3f}")
                 click.echo(f"    Final z: {summary['final_z']:.3f}")
@@ -330,10 +333,15 @@ def list_scenarios():
         click.echo(f"    Name: {info['name']}")
         click.echo(f"    Subtitle: {info['subtitle']}")
         click.echo(f"    Description: {info['description']}")
+        click.echo(f"    Expected outcome: {info['expected_outcome']}")
     
     click.echo("\n" + "─" * 70)
     click.echo("\nz_crit is computed from forcing data, controlled by --threshold-fraction")
-    click.echo("  erucakra run --scenario ssp245 --threshold-fraction 0.6")
+    click.echo("  Lower values = tips earlier (more sensitive)")
+    click.echo("  Higher values = tips later (less sensitive)")
+    click.echo("\nExamples:")
+    click.echo("  erucakra run --scenario ssp245 --threshold-fraction 0.6  # More sensitive")
+    click.echo("  erucakra run --scenario ssp245 --threshold-fraction 0.85 # Less sensitive")
     click.echo()
 
 
@@ -351,12 +359,14 @@ def info(scenario):
     click.echo("=" * 60)
     click.echo(f"Subtitle: {scenario_info['subtitle']}")
     click.echo(f"Description: {scenario_info['description']}")
+    click.echo(f"Expected outcome: {scenario_info['expected_outcome']}")
     click.echo(f"\nVisualization:")
     click.echo(f"  Primary Color: {scenario_info['color_primary']}")
     click.echo(f"  Secondary Color: {scenario_info['color_secondary']}")
     click.echo(f"  Colormap: {scenario_info['cmap_name']}")
-    click.echo(f"\nNote: z_crit is computed from forcing data at runtime.")
-    click.echo(f"Use --threshold-fraction to control sensitivity (default: 0.7)")
+    click.echo(f"\nNote: z_crit is computed at runtime as:")
+    click.echo(f"  z_crit = threshold_fraction × max(A_normalized)")
+    click.echo(f"\nUse --threshold-fraction to control sensitivity (default: 0.7)")
     click.echo()
 
 
@@ -488,6 +498,12 @@ def sensitivity(ctx, scenario, tf_min, tf_max, n_samples, output_dir, log_dir):
         if len(tipped) > 0 and len(not_tipped) > 0:
             critical_tf = (tipped["threshold_fraction"].max() + not_tipped["threshold_fraction"].min()) / 2
             click.echo(f"\nCritical threshold_fraction (transition): ~{critical_tf:.3f}")
+            click.echo(f"  Below {critical_tf:.2f}: System tips")
+            click.echo(f"  Above {critical_tf:.2f}: System remains stable")
+        elif len(tipped) == len(df):
+            click.echo(f"\nSystem tips for all tested threshold_fraction values")
+        elif len(not_tipped) == len(df):
+            click.echo(f"\nSystem remains stable for all tested threshold_fraction values")
         
         end_step(success=True)
         

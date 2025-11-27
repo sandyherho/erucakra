@@ -1,4 +1,4 @@
-"""NetCDF output writer (CF-compliant) with computed threshold metadata."""
+"""NetCDF output writer (CF-compliant)."""
 
 from typing import TYPE_CHECKING
 from pathlib import Path
@@ -75,7 +75,7 @@ def write_netcdf(
         if fa:
             ds.forcing_A_max = fa.get("A_max", np.nan)
             ds.forcing_A_min = fa.get("A_min", np.nan)
-            ds.forcing_A_max_normalized = fa.get("A_max_normalized", np.nan)
+            ds.forcing_A_normalized_max = fa.get("A_normalized_max", np.nan)
         
         # Diagnostics
         diag = results.diagnostics
