@@ -41,9 +41,9 @@ $$\frac{dz}{dt} = \varepsilon \left( \frac{A(t)}{A_{scale}} - z - \beta x^2 \rig
 
 ### Threshold Computation
 
-The critical threshold $z_{crit}$ is computed from forcing data:
+The critical threshold $z\_{crit}$ is computed from forcing data:
 
-$$z_{crit} = \text{threshold\_fraction} \times \max\left(\frac{A(t)}{A_{scale}}\right)$$
+$$z\_{crit} = \text{threshold\_fraction} \times \max\left(\frac{A(t)}{A_{scale}}\right)$$
 
 where threshold fraction (default 0.7) controls tipping sensitivity—lower values trigger earlier tipping.
 
