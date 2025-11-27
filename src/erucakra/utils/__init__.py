@@ -1,12 +1,37 @@
-"""Utility functions for erucakra."""
+"""
+erucakra - Climate Tipping Point Dynamics Model
 
-from erucakra.utils.logging import setup_logging, get_logger
-from erucakra.utils.config import load_config, save_config, DEFAULT_CONFIG
+A physically-motivated dynamical system toy model for analyzing
+climate tipping points under various SSP scenarios.
+"""
+
+__version__ = "0.0.1"
+
+from erucakra.core.model import ClimateModel
+from erucakra.core.results import SimulationResults
+from erucakra.core.dynamics import (
+    climate_tipping_model,
+    add_climate_noise,
+    compute_fixed_points,
+    compute_effective_potential,
+    compute_lyapunov_exponent,
+    FORCING_SCALES,
+    DEFAULT_Z_CRIT,
+)
+from erucakra.scenarios import SCENARIOS, get_scenario, list_scenarios
 
 __all__ = [
-    "setup_logging",
-    "get_logger",
-    "load_config",
-    "save_config",
-    "DEFAULT_CONFIG",
+    "__version__",
+    "ClimateModel",
+    "SimulationResults",
+    "climate_tipping_model",
+    "add_climate_noise",
+    "compute_fixed_points",
+    "compute_effective_potential",
+    "compute_lyapunov_exponent",
+    "FORCING_SCALES",
+    "DEFAULT_Z_CRIT",
+    "SCENARIOS",
+    "get_scenario",
+    "list_scenarios",
 ]

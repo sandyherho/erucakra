@@ -1,4 +1,11 @@
-"""Core simulation components."""
+"""
+erucakra - Climate Tipping Point Dynamics Model
+
+A physically-motivated dynamical system toy model for analyzing
+climate tipping points under various SSP scenarios.
+"""
+
+__version__ = "0.0.1"
 
 from erucakra.core.model import ClimateModel
 from erucakra.core.results import SimulationResults
@@ -11,8 +18,10 @@ from erucakra.core.dynamics import (
     FORCING_SCALES,
     DEFAULT_Z_CRIT,
 )
+from erucakra.scenarios import SCENARIOS, get_scenario, list_scenarios
 
 __all__ = [
+    "__version__",
     "ClimateModel",
     "SimulationResults",
     "climate_tipping_model",
@@ -22,4 +31,7 @@ __all__ = [
     "compute_lyapunov_exponent",
     "FORCING_SCALES",
     "DEFAULT_Z_CRIT",
+    "SCENARIOS",
+    "get_scenario",
+    "list_scenarios",
 ]
