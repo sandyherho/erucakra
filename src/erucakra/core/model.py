@@ -13,7 +13,6 @@ from erucakra.core.dynamics import (
     climate_tipping_model,
     add_climate_noise,
     compute_fixed_points,
-    compute_lyapunov_exponent,
     FORCING_SCALES,
     DEFAULT_Z_CRIT,
 )
@@ -441,10 +440,6 @@ class ClimateModel:
             if len(crossing_indices) > 0:
                 first_crossing_year = float(year[crossing_indices[0]])
             
-            # Lyapunov exponent (chaos indicator)
-            dt = (t_end - t_start) / n_points
-            lyapunov = compute_lyapunov_exponent(y, dt)
-            
             # Check for extreme values
             max_z = float(np.nanmax(y[2]))
             final_z = float(y[2, -1])
@@ -464,18 +459,9 @@ class ClimateModel:
                     {"max_variability": max_variability}
                 )
             
-            if np.isnan(lyapunov):
-                log_calculation_issue(
-                    "Lyapunov calculation failed",
-                    "Lyapunov exponent is NaN",
-                    {}
-                )
-                lyapunov = 0.0
-            
             logger.info(f"Time above threshold: {time_above_pct:.1f}%")
             logger.info(f"Max z: {max_z:.4f}")
             logger.info(f"Final z: {final_z:.4f}")
-            logger.info(f"Lyapunov exponent: {lyapunov:.6f}")
             
             if first_crossing_year:
                 logger.info(f"First threshold crossing: Year {int(first_crossing_year)}")
@@ -525,7 +511,6 @@ class ClimateModel:
                 diagnostics={
                     "time_above_threshold_pct": time_above_pct,
                     "first_crossing_year": first_crossing_year,
-                    "lyapunov_exponent": lyapunov,
                     "max_z": max_z,
                     "final_z": final_z,
                     "max_variability": max_variability,

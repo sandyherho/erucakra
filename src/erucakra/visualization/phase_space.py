@@ -57,6 +57,8 @@ def create_phase_space_gif(
     The entire history remains visible - trajectory builds up over time
     showing complete system evolution from start to current time.
     
+    No shadow/mirror projection on the x-y plane - only the real 3D trajectory.
+    
     Parameters
     ----------
     results : SimulationResults
@@ -179,12 +181,6 @@ def create_phase_space_gif(
         color="white", alpha=0.3, zorder=24,
     )
     
-    # Shadow on bottom plane - more visible
-    shadow_line, = ax.plot(
-        [], [], [], lw=1.0, alpha=0.35,
-        color=color_primary, zorder=2,
-    )
-    
     # Text overlays
     scenario_name = info.get("name", "Custom Scenario")
     subtitle = info.get("subtitle", "")
@@ -237,12 +233,10 @@ def create_phase_space_gif(
         head_glow.set_3d_properties([])
         head_glow2.set_data([], [])
         head_glow2.set_3d_properties([])
-        shadow_line.set_data([], [])
-        shadow_line.set_3d_properties([])
         status_text.set_text("")
         year_text.set_text("")
         threshold_text.set_text("")
-        return head_point, head_glow, head_glow2, shadow_line, status_text, year_text, threshold_text
+        return head_point, head_glow, head_glow2, status_text, year_text, threshold_text
     
     def animate(frame):
         pbar.update(1)
@@ -281,10 +275,6 @@ def create_phase_space_gif(
         head_glow2.set_data([curr_x], [curr_y])
         head_glow2.set_3d_properties([curr_z])
         
-        # Shadow
-        shadow_line.set_data(x[: idx + 1], y[: idx + 1])
-        shadow_line.set_3d_properties(np.full(idx + 1, z_lim[0]))
-        
         # Status text
         above_threshold = curr_z > z_crit
         status = "⚠ ABOVE THRESHOLD" if above_threshold else "Below Threshold"
@@ -314,7 +304,7 @@ def create_phase_space_gif(
         azim = -60 + progress * 200
         ax.view_init(elev=elev, azim=azim)
         
-        return head_point, head_glow, head_glow2, shadow_line, status_text, year_text, threshold_text
+        return head_point, head_glow, head_glow2, status_text, year_text, threshold_text
     
     anim = FuncAnimation(
         fig, animate, init_func=init,

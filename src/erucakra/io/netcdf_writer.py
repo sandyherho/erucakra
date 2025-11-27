@@ -76,7 +76,6 @@ def write_netcdf(
         ds.time_above_threshold_pct = diag.get("time_above_threshold_pct", 0.0)
         if diag.get("first_crossing_year"):
             ds.first_crossing_year = diag["first_crossing_year"]
-        ds.lyapunov_exponent = diag.get("lyapunov_exponent", 0.0)
         
         # Dimensions
         n_time = len(results.t)

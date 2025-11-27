@@ -110,11 +110,6 @@ class SimulationResults:
         """Real calendar year as integer."""
         return np.round(self.year).astype(np.int64)
     
-    @property
-    def lyapunov_exponent(self) -> float:
-        """Estimated largest Lyapunov exponent (chaos indicator)."""
-        return self.diagnostics.get("lyapunov_exponent", 0.0)
-    
     def summary(self) -> Dict[str, Any]:
         """Generate summary statistics."""
         return {
@@ -131,7 +126,6 @@ class SimulationResults:
             "crossed_threshold": self.crossed_threshold,
             "first_crossing_year": self.first_crossing_year,
             "max_variability": self.diagnostics.get("max_variability", float(np.max(np.abs(self.x)))),
-            "lyapunov_exponent": self.lyapunov_exponent,
             "year_start": int(np.round(self.year[0])),
             "year_end": int(np.round(self.year[-1])),
             "n_points": len(self.t),

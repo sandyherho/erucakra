@@ -1,5 +1,5 @@
 """
-erucakra - Climate Tipping Point Dynamics Model
+erucakra - Climate Tipping Point Dynamics Toy Model
 
 A physically-motivated dynamical system toy model for analyzing
 climate tipping points under various SSP scenarios.
@@ -14,7 +14,6 @@ from erucakra.core.dynamics import (
     add_climate_noise,
     compute_fixed_points,
     compute_effective_potential,
-    compute_lyapunov_exponent,
     FORCING_SCALES,
     DEFAULT_Z_CRIT,
 )
@@ -28,7 +27,6 @@ __all__ = [
     "add_climate_noise",
     "compute_fixed_points",
     "compute_effective_potential",
-    "compute_lyapunov_exponent",
     "FORCING_SCALES",
     "DEFAULT_Z_CRIT",
     "SCENARIOS",
