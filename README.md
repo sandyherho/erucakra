@@ -7,6 +7,16 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
+
+[![NumPy](https://img.shields.io/badge/NumPy-%23013243.svg?logo=numpy&logoColor=white)](https://numpy.org/)
+[![SciPy](https://img.shields.io/badge/SciPy-%230C55A5.svg?logo=scipy&logoColor=white)](https://scipy.org/)
+[![Matplotlib](https://img.shields.io/badge/Matplotlib-%23ffffff.svg?logo=Matplotlib&logoColor=black)](https://matplotlib.org/)
+[![Pandas](https://img.shields.io/badge/pandas-%23150458.svg?logo=pandas&logoColor=white)](https://pandas.pydata.org/)
+[![netCDF4](https://img.shields.io/badge/netCDF4-%23004B87.svg)](https://unidata.github.io/netcdf4-python/)
+[![tqdm](https://img.shields.io/badge/tqdm-%23FFC107.svg?logo=tqdm&logoColor=black)](https://tqdm.github.io/)
+
+![Phase Space Animation](https://raw.githubusercontent.com/sandyherho/erucakra/main/.assets/ssp585_fossil_phase_space.gif)
+
 A three-variable dynamical system model exhibiting bifurcation behavior for analyzing climate tipping points under IPCC AR6 SSP scenarios.
 
 ## Model Description
