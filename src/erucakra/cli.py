@@ -3,12 +3,12 @@ Command-line interface for erucakra.
 
 Usage:
     erucakra run --scenario ssp245
-    erucakra run --scenario ssp245 --z-crit 0.85
+    erucakra run --scenario ssp245 --threshold-fraction 0.6
     erucakra run --all-scenarios
-    erucakra run --forcing ./forcing.csv --z-crit 0.80 --a-scale 5.0
+    erucakra run --forcing ./forcing.csv
     erucakra list
     erucakra info ssp126
-    erucakra sensitivity --scenario ssp245 --z-crit-range 0.5 1.2
+    erucakra sensitivity --scenario ssp245 --tf-range 0.5 0.9
 """
 
 import sys
@@ -26,7 +26,6 @@ from erucakra.utils.logging import (
     get_timing_logger,
 )
 from erucakra.utils.config import load_config, DEFAULT_CONFIG
-from erucakra.core.dynamics import DEFAULT_Z_CRIT, FORCING_SCALES
 
 
 @click.group()
@@ -42,9 +41,8 @@ def main(ctx, verbose, debug, config):
     A physically-motivated dynamical system toy model for analyzing
     climate tipping points under various SSP scenarios.
     
-    The model exhibits a pitchfork bifurcation when the slow variable z
-    crosses z_crit. Users can tune z_crit to explore different tipping
-    threshold sensitivities.
+    The critical threshold z_crit is computed from forcing data,
+    not prescribed per scenario.
     """
     ctx.ensure_object(dict)
     ctx.obj["config"] = load_config(config)
@@ -82,22 +80,16 @@ def main(ctx, verbose, debug, config):
     help="Output formats (default: all)",
 )
 @click.option(
-    "--z-crit", "-z",
+    "--threshold-fraction", "-tf",
     type=float,
-    default=None,
-    help="Critical threshold for tipping (default: scenario-specific)",
-)
-@click.option(
-    "--a-scale",
-    type=float,
-    default=None,
-    help="Forcing normalization scale in W/m² (default: scenario-specific)",
+    default=0.7,
+    help="Fraction of max forcing for z_crit (default: 0.7)",
 )
 @click.option(
     "--t-end",
     type=float,
     default=600.0,
-    help="End time (normalized). Default: 600.0 (~480 years to 2500)",
+    help="End time (normalized). Default: 600.0",
 )
 @click.option(
     "--n-points",
@@ -128,9 +120,9 @@ def main(ctx, verbose, debug, config):
     help="Experiment name for log file",
 )
 @click.pass_context
-def run(ctx, scenario, all_scenarios, forcing, output_dir, outputs, z_crit, a_scale,
+def run(ctx, scenario, all_scenarios, forcing, output_dir, outputs, threshold_fraction,
         t_end, n_points, no_noise, seed, log_dir, experiment_name):
-    """Run climate tipping point simulation with comprehensive logging."""
+    """Run climate tipping point simulation."""
     from tqdm import tqdm
     import traceback
     
@@ -141,7 +133,6 @@ def run(ctx, scenario, all_scenarios, forcing, output_dir, outputs, z_crit, a_sc
     output_dir = Path(output_dir)
     outputs = list(outputs) if outputs else ["csv", "netcdf", "gif", "png"]
     
-    # Experiment name
     if experiment_name is None:
         if all_scenarios:
             experiment_name = "all_scenarios"
@@ -152,8 +143,6 @@ def run(ctx, scenario, all_scenarios, forcing, output_dir, outputs, z_crit, a_sc
         else:
             experiment_name = config["scenarios"]["default"]
     
-    # Setup logging FIRST - this ensures errors are captured
-    # NO timestamp in filename
     level = "DEBUG" if debug else ("INFO" if verbose else "INFO")
     logger = setup_logging(
         level=level,
@@ -161,58 +150,42 @@ def run(ctx, scenario, all_scenarios, forcing, output_dir, outputs, z_crit, a_sc
         experiment_name=experiment_name,
         format_style="detailed",
         always_save=True,
-        include_timestamp=False,  # No timestamp in filename
+        include_timestamp=False,
     )
     
-    # Wrap everything in try-except to ensure log is saved on error
     try:
-        # =====================================================================
-        # STEP: Initialize Output Directories
-        # =====================================================================
+        # Initialize Output Directories
         start_step("Initialize output directories")
         
         subdirs = {fmt: output_dir / fmt for fmt in outputs}
         for subdir in subdirs.values():
             subdir.mkdir(parents=True, exist_ok=True)
-            logger.debug(f"Created directory: {subdir}")
         
         end_step(success=True)
         
-        # =====================================================================
-        # STEP: Initialize Model
-        # =====================================================================
+        # Initialize Model
         start_step("Initialize model")
         
         model = ClimateModel(
             c=config["model"]["damping"],
             epsilon=config["model"]["epsilon"],
             beta=config["model"]["beta"],
-            z_crit=z_crit,
+            threshold_fraction=threshold_fraction,
         )
         
         click.echo(f"\n{'═' * 60}")
         click.echo(f"  Model Parameters:")
         click.echo(f"{'─' * 60}")
-        click.echo(f"  Damping (c)     = {model.params['c']}")
-        click.echo(f"  Timescale (ε)   = {model.params['epsilon']}")
-        click.echo(f"  Feedback (β)    = {model.params['beta']}")
-        
-        if z_crit is not None:
-            click.echo(f"  z_crit          = {z_crit} (user-specified)")
-        else:
-            click.echo(f"  z_crit          = scenario-specific (see below)")
-        
-        if a_scale is not None:
-            click.echo(f"  A_scale         = {a_scale} W/m² (user-specified)")
-        else:
-            click.echo(f"  A_scale         = scenario-specific (see below)")
+        click.echo(f"  Damping (c)          = {model.params['c']}")
+        click.echo(f"  Timescale (ε)        = {model.params['epsilon']}")
+        click.echo(f"  Feedback (β)         = {model.params['beta']}")
+        click.echo(f"  Threshold fraction   = {threshold_fraction}")
+        click.echo(f"  (z_crit computed from forcing data)")
         click.echo(f"{'═' * 60}")
         
         end_step(success=True)
         
-        # =====================================================================
-        # STEP: Determine Scenarios
-        # =====================================================================
+        # Determine Scenarios
         start_step("Determine scenarios to run")
         
         scenarios_to_run = []
@@ -231,20 +204,9 @@ def run(ctx, scenario, all_scenarios, forcing, output_dir, outputs, z_crit, a_sc
             scenarios_to_run = [default_scenario]
             click.echo(f"\nRunning default scenario: {default_scenario}")
         
-        # Show default thresholds
-        click.echo(f"\n  Default z_crit values by scenario:")
-        for key, val in DEFAULT_Z_CRIT.items():
-            scale = FORCING_SCALES.get(key, 5.0)
-            click.echo(f"    {key}: z_crit={val:.2f}, A_scale={scale:.1f} W/m²")
-        click.echo()
-        
-        logger.info(f"Scenarios to run: {scenarios_to_run}")
-        
         end_step(success=True)
         
-        # =====================================================================
         # Run Simulations
-        # =====================================================================
         for scenario_key in tqdm(scenarios_to_run, desc="Processing scenarios"):
             
             start_step(f"Scenario: {scenario_key}")
@@ -259,9 +221,6 @@ def run(ctx, scenario, all_scenarios, forcing, output_dir, outputs, z_crit, a_sc
                     times, values = load_forcing_csv(forcing)
                     end_step(success=True)
                     
-                    effective_z_crit = z_crit if z_crit else DEFAULT_Z_CRIT["custom"]
-                    effective_a_scale = a_scale if a_scale else FORCING_SCALES["custom"]
-                    
                     results = model.run(
                         forcing=values,
                         forcing_times=times,
@@ -270,19 +229,13 @@ def run(ctx, scenario, all_scenarios, forcing, output_dir, outputs, z_crit, a_sc
                         add_noise=not no_noise,
                         seed=seed,
                         show_progress=True,
-                        z_crit_override=effective_z_crit,
-                        A_scale_override=effective_a_scale,
                     )
                     base_name = Path(forcing).stem
                 else:
                     info = get_scenario(scenario_key)
-                    effective_z_crit = z_crit if z_crit else DEFAULT_Z_CRIT.get(scenario_key, 0.8)
-                    effective_a_scale = a_scale if a_scale else FORCING_SCALES.get(scenario_key, 5.0)
                     
                     click.echo(f"  Processing: {info['name']}")
                     click.echo(f"  {info['subtitle']}")
-                    click.echo(f"  Expected: {info['expected_outcome']}")
-                    click.echo(f"  z_crit = {effective_z_crit:.2f}, A_scale = {effective_a_scale:.1f} W/m²")
                     
                     results = model.run(
                         scenario=scenario_key,
@@ -291,69 +244,57 @@ def run(ctx, scenario, all_scenarios, forcing, output_dir, outputs, z_crit, a_sc
                         add_noise=not no_noise,
                         seed=seed,
                         show_progress=True,
-                        z_crit_override=z_crit,
-                        A_scale_override=a_scale,
                     )
                     base_name = scenario_key
                 
+                # Show computed parameters
+                click.echo(f"  Computed: z_crit = {results.z_crit:.3f}, A_scale = {results.A_scale:.2f} W/m²")
                 click.echo("─" * 60)
                 
-                # =============================================================
                 # Generate Outputs
-                # =============================================================
                 start_step(f"Generate outputs: {base_name}")
                 
                 click.echo("  Generating outputs...")
                 
                 if "csv" in outputs:
-                    start_step(f"Export CSV: {base_name}")
                     csv_path = subdirs["csv"] / f"{base_name}_data.csv"
                     results.to_csv(csv_path)
                     click.echo(f"    ✓ CSV: {csv_path}")
-                    end_step(success=True)
                 
                 if "netcdf" in outputs:
-                    start_step(f"Export NetCDF: {base_name}")
                     nc_path = subdirs["netcdf"] / f"{base_name}_data.nc"
                     results.to_netcdf(nc_path)
                     click.echo(f"    ✓ NetCDF: {nc_path}")
-                    end_step(success=True)
                 
                 if "png" in outputs:
-                    start_step(f"Export PNG: {base_name}")
                     png_path = subdirs["png"] / f"{base_name}_timeseries.png"
                     results.to_png(png_path)
                     click.echo(f"    ✓ PNG: {png_path}")
-                    end_step(success=True)
                 
                 if "gif" in outputs:
-                    start_step(f"Export GIF: {base_name}")
                     gif_path = subdirs["gif"] / f"{base_name}_phase_space.gif"
                     results.to_gif(gif_path)
                     click.echo(f"    ✓ GIF: {gif_path}")
-                    end_step(success=True)
                 
-                end_step(success=True)  # End generate outputs
+                end_step(success=True)
                 
-                # Summary
+                # Summary - binary regime
                 summary = results.summary()
                 click.echo(f"\n  Results Summary:")
-                click.echo(f"    z_crit: {summary['z_crit']:.2f}")
+                click.echo(f"    z_crit (computed): {summary['z_crit']:.3f}")
                 click.echo(f"    Max z: {summary['max_z']:.3f}")
                 click.echo(f"    Final z: {summary['final_z']:.3f}")
-                click.echo(f"    Crossed threshold: {summary['crossed_threshold']}")
+                click.echo(f"    Tipped: {summary['tipped']}")
                 click.echo(f"    Time above threshold: {summary['time_above_threshold_pct']:.1f}%")
                 if summary['first_crossing_year']:
                     click.echo(f"    First crossing: Year {int(summary['first_crossing_year'])}")
                 
-                logger.info(f"Scenario {scenario_key} completed successfully")
-                end_step(success=True)  # End scenario
+                end_step(success=True)
                 
             except Exception as e:
                 log_error(e, f"Scenario {scenario_key}")
                 end_step(success=False)
                 click.echo(f"\n  ✗ ERROR in scenario {scenario_key}: {e}", err=True)
-                # Continue with other scenarios
                 continue
         
         click.echo(f"\n{'═' * 70}")
@@ -362,7 +303,6 @@ def run(ctx, scenario, all_scenarios, forcing, output_dir, outputs, z_crit, a_sc
         click.echo(f"\nOutput Directory: {output_dir}")
         click.echo(f"Log Directory: {log_dir}")
         
-        # Print timing summary to console
         timing_logger = get_timing_logger()
         if timing_logger:
             click.echo(timing_logger.get_summary())
@@ -381,25 +321,19 @@ def run(ctx, scenario, all_scenarios, forcing, output_dir, outputs, z_crit, a_sc
 
 @main.command("list")
 def list_scenarios():
-    """List available scenarios with their default thresholds."""
+    """List available scenarios."""
     click.echo("\nAvailable Scenarios:")
     click.echo("─" * 70)
     
     for key, info in SCENARIOS.items():
-        z_crit = DEFAULT_Z_CRIT.get(key, 0.8)
-        a_scale = FORCING_SCALES.get(key, 5.0)
-        
         click.echo(f"\n  {key}:")
         click.echo(f"    Name: {info['name']}")
         click.echo(f"    Subtitle: {info['subtitle']}")
-        click.echo(f"    Expected Outcome: {info['expected_outcome']}")
-        click.echo(f"    Default z_crit: {z_crit:.2f}")
-        click.echo(f"    Default A_scale: {a_scale:.1f} W/m²")
         click.echo(f"    Description: {info['description']}")
     
     click.echo("\n" + "─" * 70)
-    click.echo("\nTo override defaults, use --z-crit and --a-scale options:")
-    click.echo("  erucakra run --scenario ssp245 --z-crit 0.85")
+    click.echo("\nz_crit is computed from forcing data, controlled by --threshold-fraction")
+    click.echo("  erucakra run --scenario ssp245 --threshold-fraction 0.6")
     click.echo()
 
 
@@ -413,21 +347,16 @@ def info(scenario):
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
     
-    z_crit = DEFAULT_Z_CRIT.get(scenario, 0.8)
-    a_scale = FORCING_SCALES.get(scenario, 5.0)
-    
     click.echo(f"\n{scenario_info['name']}")
     click.echo("=" * 60)
     click.echo(f"Subtitle: {scenario_info['subtitle']}")
-    click.echo(f"Expected Outcome: {scenario_info['expected_outcome']}")
     click.echo(f"Description: {scenario_info['description']}")
-    click.echo(f"\nThreshold Settings:")
-    click.echo(f"  Default z_crit: {z_crit:.2f}")
-    click.echo(f"  Default A_scale: {a_scale:.1f} W/m²")
     click.echo(f"\nVisualization:")
     click.echo(f"  Primary Color: {scenario_info['color_primary']}")
     click.echo(f"  Secondary Color: {scenario_info['color_secondary']}")
     click.echo(f"  Colormap: {scenario_info['cmap_name']}")
+    click.echo(f"\nNote: z_crit is computed from forcing data at runtime.")
+    click.echo(f"Use --threshold-fraction to control sensitivity (default: 0.7)")
     click.echo()
 
 
@@ -439,22 +368,22 @@ def info(scenario):
     help="Scenario to analyze",
 )
 @click.option(
-    "--z-crit-min",
+    "--tf-min",
     type=float,
     default=0.5,
-    help="Minimum z_crit value",
+    help="Minimum threshold_fraction value",
 )
 @click.option(
-    "--z-crit-max",
+    "--tf-max",
     type=float,
-    default=1.2,
-    help="Maximum z_crit value",
+    default=0.9,
+    help="Maximum threshold_fraction value",
 )
 @click.option(
     "--n-samples",
     type=int,
     default=10,
-    help="Number of z_crit values to test",
+    help="Number of threshold_fraction values to test",
 )
 @click.option(
     "--output-dir", "-o",
@@ -469,15 +398,14 @@ def info(scenario):
     help="Log directory",
 )
 @click.pass_context
-def sensitivity(ctx, scenario, z_crit_min, z_crit_max, n_samples, output_dir, log_dir):
-    """Run sensitivity analysis over z_crit values."""
+def sensitivity(ctx, scenario, tf_min, tf_max, n_samples, output_dir, log_dir):
+    """Run sensitivity analysis over threshold_fraction values."""
     import numpy as np
     import pandas as pd
     import traceback
     
     config = ctx.obj["config"]
     
-    # Setup logging - NO timestamp
     logger = setup_logging(
         level="INFO",
         log_dir=log_dir,
@@ -500,7 +428,7 @@ def sensitivity(ctx, scenario, z_crit_min, z_crit_max, n_samples, output_dir, lo
         )
         
         click.echo(f"\nSensitivity Analysis: {scenario}")
-        click.echo(f"z_crit range: [{z_crit_min}, {z_crit_max}]")
+        click.echo(f"threshold_fraction range: [{tf_min}, {tf_max}]")
         click.echo(f"Samples: {n_samples}")
         click.echo("─" * 50)
         
@@ -510,7 +438,7 @@ def sensitivity(ctx, scenario, z_crit_min, z_crit_max, n_samples, output_dir, lo
         
         results_list = model.sensitivity_analysis(
             scenario=scenario,
-            z_crit_range=(z_crit_min, z_crit_max),
+            threshold_fraction_range=(tf_min, tf_max),
             n_samples=n_samples,
             add_noise=False,
         )
@@ -521,49 +449,48 @@ def sensitivity(ctx, scenario, z_crit_min, z_crit_max, n_samples, output_dir, lo
         start_step("Compile results")
         
         summary_data = []
-        for z_crit, results in results_list:
+        for tf, results in results_list:
             if results is not None:
                 summary = results.summary()
                 summary_data.append({
-                    "z_crit": z_crit,
+                    "threshold_fraction": tf,
+                    "z_crit": summary["z_crit"],
                     "max_z": summary["max_z"],
                     "final_z": summary["final_z"],
-                    "crossed": summary["crossed_threshold"],
+                    "tipped": summary["tipped"],
                     "time_above_pct": summary["time_above_threshold_pct"],
                     "first_crossing": summary["first_crossing_year"],
                 })
             else:
                 summary_data.append({
-                    "z_crit": z_crit,
+                    "threshold_fraction": tf,
+                    "z_crit": np.nan,
                     "max_z": np.nan,
                     "final_z": np.nan,
-                    "crossed": None,
+                    "tipped": None,
                     "time_above_pct": np.nan,
                     "first_crossing": None,
                 })
         
         df = pd.DataFrame(summary_data)
         
-        # Save results
         csv_path = output_dir / f"{scenario}_sensitivity.csv"
         df.to_csv(csv_path, index=False)
         click.echo(f"\nResults saved to: {csv_path}")
         
-        # Print summary
         click.echo("\nResults:")
         click.echo(df.to_string(index=False))
         
-        # Find critical z_crit where behavior changes
-        crossed = df[df["crossed"] == True]
-        not_crossed = df[df["crossed"] == False]
+        # Find critical threshold_fraction where behavior changes
+        tipped = df[df["tipped"] == True]
+        not_tipped = df[df["tipped"] == False]
         
-        if len(crossed) > 0 and len(not_crossed) > 0:
-            critical_z = (crossed["z_crit"].max() + not_crossed["z_crit"].min()) / 2
-            click.echo(f"\nCritical z_crit (transition): ~{critical_z:.3f}")
+        if len(tipped) > 0 and len(not_tipped) > 0:
+            critical_tf = (tipped["threshold_fraction"].max() + not_tipped["threshold_fraction"].min()) / 2
+            click.echo(f"\nCritical threshold_fraction (transition): ~{critical_tf:.3f}")
         
         end_step(success=True)
         
-        # Print timing summary
         timing_logger = get_timing_logger()
         if timing_logger:
             click.echo(timing_logger.get_summary())

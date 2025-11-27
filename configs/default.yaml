@@ -23,8 +23,10 @@ model:
   # Feedback strength (variability -> accumulation)
   beta: 0.8
   
-  # Critical threshold (~1.5°C warming)
-  z_critical: 1.0
+  # Threshold fraction: z_crit = threshold_fraction * max(A_normalized)
+  # Controls sensitivity to tipping
+  # Lower values = tips earlier, higher values = tips later
+  threshold_fraction: 0.7
 
 simulation:
   # Time parameters

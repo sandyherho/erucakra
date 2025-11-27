@@ -2,9 +2,9 @@
 scenario:
   key: ssp585
   name: "SSP5-8.5: Fossil Development"
-  subtitle: 'No Mitigation — "Highway to Warming"'
-  expected_outcome: CATASTROPHIC
-  description: "Multiple tipping points crossed — chaotic high-amplitude regime"
+  subtitle: "Very High Emissions Pathway"
+  description: "Very high emissions with no significant mitigation"
+
 visualization:
   color_primary: "#FF0066"
   color_secondary: "#CC0044"

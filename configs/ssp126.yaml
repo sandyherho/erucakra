@@ -2,9 +2,9 @@
 scenario:
   key: ssp126
   name: "SSP1-2.6: Sustainability"
-  subtitle: 'Strong Mitigation — "Taking the Green Road"'
-  expected_outcome: STABLE
-  description: "Aggressive early action keeps system below tipping threshold"
+  subtitle: "Strong Mitigation Pathway"
+  description: "Low emissions with aggressive early mitigation"
+
 visualization:
   color_primary: "#00E5CC"
   color_secondary: "#00FF88"

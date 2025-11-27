@@ -2,9 +2,9 @@
 scenario:
   key: ssp245
   name: "SSP2-4.5: Middle Road"
-  subtitle: 'Moderate Action — "Muddling Through"'
-  expected_outcome: MARGINAL
-  description: "System hovers near threshold — outcome uncertain"
+  subtitle: "Moderate Mitigation Pathway"
+  description: "Intermediate emissions with gradual mitigation"
+
 visualization:
   color_primary: "#FFD700"
   color_secondary: "#FFA500"

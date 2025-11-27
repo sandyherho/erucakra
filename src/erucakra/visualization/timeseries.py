@@ -24,9 +24,9 @@ def create_timeseries_plot(
     
     Creates a 4-panel diagnostic plot showing:
     - Climate variability (x) with regime shading
-    - System state (z) with threshold z_crit
-    - Normalized forcing (A/A_scale) showing what z "sees"
-    - Summary statistics and outcome
+    - System state (z) with computed threshold z_crit
+    - Normalized forcing (A/A_scale)
+    - Summary statistics
     
     Parameters
     ----------
@@ -46,7 +46,6 @@ def create_timeseries_plot(
     z_crit = results.z_crit
     A_scale = results.A_scale
     
-    # Style settings
     plt.style.use("dark_background")
     fig = plt.figure(figsize=(16, 13))
     fig.patch.set_facecolor("#050510")
@@ -61,12 +60,10 @@ def create_timeseries_plot(
             spine.set_color("#333355")
             spine.set_linewidth(0.5)
     
-    # Colors from scenario
     color_trajectory = info.get("color_trajectory", "#00FFFF")
     color_primary = info.get("color_primary", "#00E5CC")
     color_forcing = info.get("color_forcing", "#88FF00")
     
-    # Get regime transitions
     transitions = results.get_regime_transitions()
     
     # === PANEL 1: Climate Variability (x) ===
@@ -88,7 +85,6 @@ def create_timeseries_plot(
     ax1.set_ylabel("Climate Variability (x)\n[normalized]", fontsize=10, color="white")
     ax1.set_xlim([results.year[0], results.year[-1]])
     
-    # Mark threshold crossings
     for trans in transitions:
         color = "#FF4444" if trans["direction"] == "up" else "#44FF44"
         ax1.axvline(trans["year"], color=color, alpha=0.5, lw=1.5, linestyle=":")
@@ -97,20 +93,16 @@ def create_timeseries_plot(
     ax2 = fig.add_subplot(gs[1])
     style_axis(ax2)
     
-    ax2.plot(results.year, results.z, color="white", lw=2.5, label=f"System State (z)")
+    ax2.plot(results.year, results.z, color="white", lw=2.5, label="System State (z)")
     ax2.axhline(z_crit, color="#FF3333", alpha=0.9, linestyle="--", lw=2.5, 
-                label=f"Tipping Threshold (z_crit={z_crit:.2f})")
+                label=f"z_crit = {z_crit:.3f} (computed)")
     
-    # Regime zones relative to z_crit
     z_max = max(z_crit + 0.5, results.z.max() + 0.2)
     z_min = min(-0.1, results.z.min() - 0.1)
     
-    # Danger zone: above z_crit
-    ax2.axhspan(z_crit, z_max, alpha=0.15, color="#FF0000", label="Tipped Regime")
-    # Warning zone: 80% to 100% of z_crit
-    ax2.axhspan(z_crit * 0.8, z_crit, alpha=0.1, color="#FFAA00", label="Warning Zone")
-    # Safe zone: below 80%
-    ax2.axhspan(z_min, z_crit * 0.8, alpha=0.08, color="#00FF00", label="Safe Zone")
+    # Binary regime zones
+    ax2.axhspan(z_crit, z_max, alpha=0.15, color="#FF0000", label="Tipped regime")
+    ax2.axhspan(z_min, z_crit, alpha=0.08, color="#00FF00", label="Not tipped")
     
     # Fill when above threshold
     ax2.fill_between(
@@ -129,7 +121,7 @@ def create_timeseries_plot(
         marker = "^" if trans["direction"] == "up" else "v"
         ax2.plot(trans["year"], z_crit, marker, color=color, markersize=12, 
                 markeredgecolor="white", markeredgewidth=1.5, zorder=10)
-        label = "TIPPING" if trans["direction"] == "up" else "Recovery"
+        label = "Tipping" if trans["direction"] == "up" else "Recovery"
         ax2.annotate(
             f"{label}\n{int(trans['year'])}",
             xy=(trans["year"], z_crit),
@@ -139,25 +131,22 @@ def create_timeseries_plot(
             arrowprops=dict(arrowstyle="->", color=color, alpha=0.7),
         )
     
-    ax2.set_ylabel(f"Accumulated State (z)\n[z_crit = {z_crit:.2f}]", fontsize=10, color="white")
+    ax2.set_ylabel(f"Accumulated State (z)", fontsize=10, color="white")
     ax2.legend(loc="upper left", fontsize=8, framealpha=0.4, ncol=2)
     ax2.set_xlim([results.year[0], results.year[-1]])
     ax2.set_ylim([z_min, z_max])
     
-    # === PANEL 3: Normalized Forcing A(t)/A_scale ===
+    # === PANEL 3: Normalized Forcing ===
     ax3 = fig.add_subplot(gs[2])
     style_axis(ax3)
     
-    # Plot normalized forcing (what z equation sees)
     ax3.plot(results.year, results.A_normalized, color=color_forcing, lw=2.5, 
              label=f"Normalized Forcing (A/{A_scale:.1f})")
     ax3.fill_between(results.year, results.A_normalized, alpha=0.25, color=color_forcing)
     
-    # Show z_crit level for reference
     ax3.axhline(z_crit, color="#FF3333", alpha=0.6, linestyle=":", lw=1.5,
-                label=f"z_crit = {z_crit:.2f}")
+                label=f"z_crit = {z_crit:.3f}")
     
-    # Secondary axis for raw forcing
     ax3b = ax3.twinx()
     ax3b.plot(results.year, results.A, color="#AAAAAA", lw=1, alpha=0.4, linestyle="--")
     ax3b.set_ylabel("Raw Forcing (W/m²)", fontsize=9, color="#888888")
@@ -174,30 +163,10 @@ def create_timeseries_plot(
     ax4.axis("off")
     
     summary = results.summary()
-    expected = info.get("expected_outcome", "N/A")
-    
-    # Determine actual outcome
-    if not results.crossed_threshold:
-        actual_outcome = "STABLE"
-    elif summary["time_above_threshold_pct"] > 50:
-        actual_outcome = "TIPPED"
-    else:
-        actual_outcome = "MARGINAL"
-    
-    outcome_colors = {
-        "STABLE": "#00FF88",
-        "MARGINAL": "#FFDD00",
-        "TIPPING": "#FF6600",
-        "TIPPED": "#FF4444",
-        "CATASTROPHIC": "#FF0044",
-    }
-    expected_color = outcome_colors.get(expected, "#AAAAAA")
-    actual_color = outcome_colors.get(actual_outcome, "#FFFFFF")
     
     # Parameters box
     params_text = (
-        f"Parameters:  z_crit = {z_crit:.2f}  |  "
-        f"A_scale = {A_scale:.1f} W/m²  |  "
+        f"Parameters:  threshold_fraction = {results.threshold_fraction:.2f}  |  "
         f"ε = {results.model_params.get('epsilon', 0.02)}  |  "
         f"c = {results.model_params.get('c', 0.2)}  |  "
         f"β = {results.model_params.get('beta', 0.8)}"
@@ -209,15 +178,25 @@ def create_timeseries_plot(
         ha="center", family="monospace",
     )
     
-    # Expected vs actual
+    # Computed values
+    computed_text = f"Computed: z_crit = {z_crit:.3f}  |  A_scale = {A_scale:.1f} W/m²"
     ax4.text(
-        0.3, 0.55, f"Expected: {expected}",
-        transform=ax4.transAxes, fontsize=13, color=expected_color,
-        ha="center", fontweight="bold",
+        0.5, 0.65, computed_text,
+        transform=ax4.transAxes, fontsize=10, color="#AAAAAA",
+        ha="center", family="monospace",
     )
+    
+    # Binary outcome
+    if results.tipped:
+        outcome_text = "TIPPED"
+        outcome_color = "#FF4444"
+    else:
+        outcome_text = "NOT TIPPED"
+        outcome_color = "#00FF88"
+    
     ax4.text(
-        0.7, 0.55, f"Actual: {actual_outcome}",
-        transform=ax4.transAxes, fontsize=13, color=actual_color,
+        0.5, 0.4, f"Outcome: {outcome_text}",
+        transform=ax4.transAxes, fontsize=14, color=outcome_color,
         ha="center", fontweight="bold",
     )
     
@@ -231,7 +210,7 @@ def create_timeseries_plot(
     )
     
     ax4.text(
-        0.5, 0.2, stats_text,
+        0.5, 0.15, stats_text,
         transform=ax4.transAxes, fontsize=10, color="#CCCCCC",
         ha="center", family="monospace",
     )
