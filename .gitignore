@@ -65,3 +65,7 @@ logs/
 *.log
 *.nc
 *.gif
+
+# assets
+*.gif
+!.assets/*.gif

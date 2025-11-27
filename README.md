@@ -1,6 +1,7 @@
 # `erucakra`: A Physically-Motivated Toy Model for Climate Tipping Point Dynamics
 
 [![DOI](https://zenodo.org/badge/1104936660.svg)](https://doi.org/10.5281/zenodo.17732519)
+
 [![PyPI version](https://badge.fury.io/py/erucakra.svg)](https://badge.fury.io/py/erucakra)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
