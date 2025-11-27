@@ -28,9 +28,9 @@ from erucakra.utils.config import load_config, DEFAULT_CONFIG
 @click.pass_context
 def main(ctx, verbose, debug, config):
     """
-    erucakra - Climate Tipping Point Dynamics Model
+    erucakra - Climate Tipping Point Dynamics Toy Model
     
-    A physically-motivated dynamical systems model for analyzing
+    A physically-motivated dynamical system toy model for analyzing
     climate tipping points under various SSP scenarios.
     """
     ctx.ensure_object(dict)
@@ -100,20 +100,18 @@ def main(ctx, verbose, debug, config):
     default="./logs",
     help="Log directory",
 )
+@click.option(
+    "--experiment-name", "-e",
+    type=str,
+    default=None,
+    help="Experiment name for log file (default: scenario name or 'custom')",
+)
 @click.pass_context
-def run(ctx, scenario, all_scenarios, forcing, output_dir, outputs, t_end, n_points, no_noise, seed, log_dir):
+def run(ctx, scenario, all_scenarios, forcing, output_dir, outputs, t_end, n_points, no_noise, seed, log_dir, experiment_name):
     """Run climate tipping point simulation."""
     from tqdm import tqdm
     
     config = ctx.obj["config"]
-    
-    # Setup logging to file
-    logger = setup_logging(
-        level="DEBUG",
-        log_dir=log_dir,
-        include_timestamp=True,
-        format_style="detailed",
-    )
     
     output_dir = Path(output_dir)
     outputs = list(outputs) if outputs else ["csv", "netcdf", "gif", "png"]
@@ -122,6 +120,25 @@ def run(ctx, scenario, all_scenarios, forcing, output_dir, outputs, t_end, n_poi
     subdirs = {fmt: output_dir / fmt for fmt in outputs}
     for subdir in subdirs.values():
         subdir.mkdir(parents=True, exist_ok=True)
+    
+    # Determine experiment name for logging
+    if experiment_name is None:
+        if all_scenarios:
+            experiment_name = "all_scenarios"
+        elif scenario:
+            experiment_name = scenario
+        elif forcing:
+            experiment_name = Path(forcing).stem
+        else:
+            experiment_name = config["scenarios"]["default"]
+    
+    # Setup logging to file with experiment name
+    logger = setup_logging(
+        level="DEBUG",
+        log_dir=log_dir,
+        experiment_name=experiment_name,
+        format_style="detailed",
+    )
     
     logger.info("=" * 70)
     logger.info("  ERUCAKRA - Climate Tipping Point Dynamics")

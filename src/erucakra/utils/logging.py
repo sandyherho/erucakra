@@ -11,7 +11,7 @@ def setup_logging(
     level: str = "INFO",
     log_file: Optional[str | Path] = None,
     log_dir: Optional[str | Path] = None,
-    include_timestamp: bool = True,
+    experiment_name: Optional[str] = None,
     format_style: str = "detailed",
 ) -> logging.Logger:
     """
@@ -24,9 +24,9 @@ def setup_logging(
     log_file : str or Path, optional
         Specific log file path.
     log_dir : str or Path, optional
-        Directory for log files. If provided, creates timestamped log file.
-    include_timestamp : bool, optional
-        Include timestamp in log filename. Default is True.
+        Directory for log files. If provided, creates log file with experiment name.
+    experiment_name : str, optional
+        Name for the experiment/run (used in log filename). Default is "erucakra".
     format_style : str, optional
         Format style: "detailed", "simple", or "minimal". Default is "detailed".
     
@@ -65,11 +65,10 @@ def setup_logging(
         else:
             log_dir = Path(log_dir)
             log_dir.mkdir(parents=True, exist_ok=True)
-            if include_timestamp:
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                log_path = log_dir / f"erucakra_{timestamp}.log"
-            else:
-                log_path = log_dir / "erucakra.log"
+            
+            # Use experiment name instead of timestamp
+            name = experiment_name if experiment_name else "erucakra"
+            log_path = log_dir / f"{name}.log"
         
         log_path.parent.mkdir(parents=True, exist_ok=True)
         

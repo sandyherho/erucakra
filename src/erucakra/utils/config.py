@@ -44,7 +44,6 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "logging": {
         "level": "INFO",
         "log_dir": "./logs",
-        "include_timestamp": True,
         "format_style": "detailed",
     },
     "visualization": {

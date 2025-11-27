@@ -85,6 +85,11 @@ class SimulationResults:
         """Whether the tipping threshold was crossed."""
         return bool(np.any(self.z > 1))
     
+    @property
+    def real_year(self) -> NDArray[np.int64]:
+        """Real calendar year as integer."""
+        return np.round(self.year).astype(np.int64)
+    
     def summary(self) -> Dict[str, Any]:
         """Generate summary statistics."""
         return {
@@ -95,8 +100,8 @@ class SimulationResults:
             "time_above_threshold_pct": self.time_above_threshold,
             "crossed_threshold": self.crossed_threshold,
             "max_variability": float(np.max(np.abs(self.x))),
-            "year_start": float(self.year[0]),
-            "year_end": float(self.year[-1]),
+            "year_start": int(np.round(self.year[0])),
+            "year_end": int(np.round(self.year[-1])),
             "n_points": len(self.t),
         }
     
@@ -105,8 +110,8 @@ class SimulationResults:
         import pandas as pd
         
         return pd.DataFrame({
+            "year": self.real_year,
             "time_normalized": self.t,
-            "year": self.year,
             "x_variability": self.x,
             "y_momentum": self.y,
             "z_accumulated": self.z,
@@ -131,7 +136,7 @@ class SimulationResults:
         filepath : str or Path
             Output file path.
         include_header : bool, optional
-            Include metadata header. Default is True.
+            Include column header. Default is True.
         float_format : str, optional
             Float format string. Default is "%.6f".
         """
@@ -205,7 +210,7 @@ class SimulationResults:
         name = self.scenario_info.get("name", "Custom") if self.scenario_info else "Custom"
         return (
             f"SimulationResults(scenario='{name}', "
-            f"years={self.year[0]:.0f}-{self.year[-1]:.0f}, "
+            f"years={int(np.round(self.year[0]))}-{int(np.round(self.year[-1]))}, "
             f"n_points={len(self.t)}, "
             f"max_z={self.max_z:.3f})"
         )

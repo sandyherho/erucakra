@@ -69,19 +69,19 @@ def write_netcdf(
         n_time = len(results.t)
         ds.createDimension("time", n_time)
         
-        # Time coordinate (normalized)
-        time_var = ds.createVariable("time", "f8", ("time",), **comp_kwargs)
-        time_var.units = "normalized_time_units"
-        time_var.long_name = "Normalized simulation time"
-        time_var.standard_name = "time"
-        time_var[:] = results.t
-        
-        # Calendar year
-        year_var = ds.createVariable("year", "f8", ("time",), **comp_kwargs)
+        # Real calendar year as primary time coordinate
+        year_var = ds.createVariable("year", "i4", ("time",), **comp_kwargs)
         year_var.units = "year"
         year_var.long_name = "Calendar year"
         year_var.calendar = "proleptic_gregorian"
-        year_var[:] = results.year
+        year_var.standard_name = "time"
+        year_var[:] = results.real_year
+        
+        # Normalized time (secondary)
+        time_var = ds.createVariable("time_normalized", "f8", ("time",), **comp_kwargs)
+        time_var.units = "normalized_time_units"
+        time_var.long_name = "Normalized simulation time"
+        time_var[:] = results.t
         
         # State variables
         x_var = ds.createVariable("x_variability", "f8", ("time",), **comp_kwargs)
