@@ -182,4 +182,4 @@ results = model.run(forcing=values, forcing_times=times)
 
 ## License
 
-MIT License © 2024 Sandy H. S. Herho
+MIT License © 2025 Sandy H. S. Herho
