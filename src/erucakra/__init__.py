@@ -5,7 +5,7 @@ A physically-motivated dynamical system toy model for analyzing
 climate tipping points under various SSP scenarios.
 """
 
-__version__ = "0.0.1"
+__version__ = "0.0.2"  # Bumped version for the fix
 
 from erucakra.core.model import ClimateModel
 from erucakra.core.results import SimulationResults
@@ -15,7 +15,8 @@ from erucakra.core.dynamics import (
     compute_fixed_points,
     compute_effective_potential,
     FORCING_SCALES,
-    DEFAULT_Z_CRIT,
+    GLOBAL_A_SCALE,           # NEW: Global normalization scale
+    DEFAULT_Z_CRIT_ABSOLUTE,  # NEW: Absolute threshold
 )
 from erucakra.scenarios import SCENARIOS, get_scenario, list_scenarios
 
@@ -28,7 +29,8 @@ __all__ = [
     "compute_fixed_points",
     "compute_effective_potential",
     "FORCING_SCALES",
-    "DEFAULT_Z_CRIT",
+    "GLOBAL_A_SCALE",
+    "DEFAULT_Z_CRIT_ABSOLUTE",
     "SCENARIOS",
     "get_scenario",
     "list_scenarios",
