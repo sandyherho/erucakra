@@ -297,16 +297,16 @@ def create_phase_space_gif(
         
         # Threshold status with colors
         if curr_z > z_crit + 0.2:
-            threshold_text.set_text("🔴 TIPPED REGIME")
+            threshold_text.set_text("TIPPED REGIME")
             threshold_text.set_color("#FF4444")
         elif curr_z > z_crit:
-            threshold_text.set_text("🟠 ABOVE THRESHOLD")
+            threshold_text.set_text("ABOVE THRESHOLD")
             threshold_text.set_color("#FF8844")
         elif curr_z > z_crit - 0.1:
-            threshold_text.set_text("🟡 WARNING ZONE")
+            threshold_text.set_text("WARNING ZONE")
             threshold_text.set_color("#FFCC00")
         else:
-            threshold_text.set_text("🟢 SAFE ZONE")
+            threshold_text.set_text("SAFE ZONE")
             threshold_text.set_color("#00FF88")
         
         # Camera rotation
