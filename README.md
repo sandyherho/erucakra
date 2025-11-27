@@ -45,7 +45,7 @@ The critical threshold $z_{crit}$ is computed from forcing data:
 
 $$z_{crit} = \text{threshold\_fraction} \times \max\left(\frac{A(t)}{A_{scale}}\right)$$
 
-where `threshold_fraction` (default 0.7) controls tipping sensitivity—lower values trigger earlier tipping.
+where threshold fraction (default 0.7) controls tipping sensitivity—lower values trigger earlier tipping.
 
 ### Tipping Dynamics
 
@@ -177,4 +177,4 @@ results = model.run(forcing=values, forcing_times=times)
 
 ## License
 
-MIT License © 2024 Sandy H. S. Herho
+MIT License © 2025 Sandy H. S. Herho
