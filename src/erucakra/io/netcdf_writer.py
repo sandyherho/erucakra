@@ -1,4 +1,4 @@
-"""NetCDF output writer (CF-compliant)."""
+"""NetCDF output writer (CF-compliant) with threshold metadata."""
 
 from typing import TYPE_CHECKING
 from pathlib import Path
@@ -21,7 +21,8 @@ def write_netcdf(
     """
     Write simulation results to NetCDF file.
     
-    Creates a CF-compliant NetCDF4 file with full metadata.
+    Creates a CF-compliant NetCDF4 file with full metadata including
+    the critical threshold z_crit and forcing scale A_scale.
     
     Parameters
     ----------
@@ -56,14 +57,26 @@ def write_netcdf(
         
         info = results.scenario_info or {}
         ds.scenario = info.get("name", "Custom Forcing")
+        ds.scenario_key = results.scenario_key or "custom"
         ds.scenario_description = info.get("description", "N/A")
         ds.expected_outcome = info.get("expected_outcome", "N/A")
         
-        # Model parameters
+        # Model parameters - including z_crit and A_scale
         ds.model_damping_c = results.model_params.get("c", 0.2)
         ds.model_epsilon = results.model_params.get("epsilon", 0.02)
         ds.model_beta = results.model_params.get("beta", 0.8)
-        ds.model_z_critical = results.model_params.get("z_crit", 1.0)
+        ds.model_z_critical = results.z_crit
+        ds.model_A_scale = results.A_scale
+        
+        # Diagnostics as attributes
+        diag = results.diagnostics
+        ds.max_z = diag.get("max_z", float(np.max(results.z)))
+        ds.final_z = diag.get("final_z", float(results.z[-1]))
+        ds.crossed_threshold = int(results.crossed_threshold)
+        ds.time_above_threshold_pct = diag.get("time_above_threshold_pct", 0.0)
+        if diag.get("first_crossing_year"):
+            ds.first_crossing_year = diag["first_crossing_year"]
+        ds.lyapunov_exponent = diag.get("lyapunov_exponent", 0.0)
         
         # Dimensions
         n_time = len(results.t)
@@ -81,6 +94,7 @@ def write_netcdf(
         time_var = ds.createVariable("time_normalized", "f8", ("time",), **comp_kwargs)
         time_var.units = "normalized_time_units"
         time_var.long_name = "Normalized simulation time"
+        time_var.comment = "t_norm = (year - 2020) / 0.8"
         time_var[:] = results.t
         
         # State variables
@@ -100,20 +114,30 @@ def write_netcdf(
         z_var.units = "1"
         z_var.long_name = "Accumulated forcing (slow variable)"
         z_var.description = "Ocean heat content / ice sheet state proxy"
-        z_var.tipping_threshold = 1.0
+        z_var.tipping_threshold = results.z_crit
+        z_var.comment = f"Tipping occurs when z > z_crit = {results.z_crit:.3f}"
         z_var[:] = results.z
         
-        # Forcing
+        # Forcing (raw)
         A_var = ds.createVariable("A_forcing", "f8", ("time",), **comp_kwargs)
         A_var.units = "W m-2"
         A_var.long_name = "Effective radiative forcing"
         A_var.standard_name = "toa_incoming_shortwave_flux"
         A_var[:] = results.A
         
+        # Normalized forcing
+        A_norm_var = ds.createVariable("A_normalized", "f8", ("time",), **comp_kwargs)
+        A_norm_var.units = "1"
+        A_norm_var.long_name = "Normalized radiative forcing"
+        A_norm_var.comment = f"A_normalized = A_forcing / {results.A_scale:.2f}"
+        A_norm_var.scale_factor_used = results.A_scale
+        A_norm_var[:] = results.A_normalized
+        
         # Derived quantities
         warm_var = ds.createVariable("warming_proxy", "f8", ("time",), **comp_kwargs)
         warm_var.units = "K"
         warm_var.long_name = "Warming proxy (approximate temperature anomaly)"
+        warm_var.comment = "warming = z * 1.5 (rough approximation)"
         warm_var[:] = results.warming
         
         vel_var = ds.createVariable("phase_velocity", "f8", ("time",), **comp_kwargs)
@@ -123,8 +147,9 @@ def write_netcdf(
         
         dist_var = ds.createVariable("distance_to_threshold", "f8", ("time",), **comp_kwargs)
         dist_var.units = "1"
-        dist_var.long_name = "Distance from tipping threshold (z - 1)"
+        dist_var.long_name = f"Distance from tipping threshold (z - {results.z_crit:.2f})"
         dist_var.positive_means = "above_threshold"
+        dist_var.threshold_value = results.z_crit
         dist_var[:] = results.distance_to_threshold
         
         # Regime (as integer flags)
@@ -133,6 +158,7 @@ def write_netcdf(
         regime_var.long_name = "Climate regime flag"
         regime_var.flag_values = np.array([0, 1], dtype=np.int16)
         regime_var.flag_meanings = "stable tipped"
-        regime_var[:] = np.where(results.z > 1, 1, 0).astype(np.int16)
+        regime_var.threshold = results.z_crit
+        regime_var[:] = np.where(results.z > results.z_crit, 1, 0).astype(np.int16)
     
-    logger.info(f"NetCDF written: {n_time} time steps")
+    logger.info(f"NetCDF written: {n_time} time steps, z_crit={results.z_crit:.3f}")
