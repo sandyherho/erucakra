@@ -13,6 +13,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "default": "ssp245",
         "available": ["ssp126", "ssp245", "ssp370", "ssp585"],
     },
+    # Custom forcing file - when set, overrides scenario
+    "forcing_file": None,
     "model": {
         "damping": 0.2,
         "epsilon": 0.02,
@@ -52,6 +54,13 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "gif_duration": 12,
         "gif_dpi": 100,
     },
+    # Optional scenario metadata for custom forcings
+    "scenario": {
+        "key": None,
+        "name": None,
+        "subtitle": None,
+        "description": None,
+    },
 }
 
 
@@ -84,8 +93,19 @@ def load_config(
         with open(config_path, "r") as f:
             user_config = yaml.safe_load(f)
         
+        if user_config is None:
+            user_config = {}
+        
         # Merge with defaults
         config = _deep_merge(DEFAULT_CONFIG.copy(), user_config)
+        
+        # Resolve relative paths for forcing_file relative to config file location
+        if config.get("forcing_file"):
+            forcing_path = Path(config["forcing_file"])
+            if not forcing_path.is_absolute():
+                # Make relative to config file directory
+                config["forcing_file"] = str(config_path.parent / forcing_path)
+        
         return config
     
     if create_default:

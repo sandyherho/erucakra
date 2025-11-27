@@ -2,13 +2,14 @@
 Command-line interface for erucakra.
 
 Usage:
+    erucakra run --config ./configs/custom_config.yaml
     erucakra run --scenario ssp245
     erucakra run --scenario ssp245 --threshold-fraction 0.6
     erucakra run --all-scenarios
-    erucakra run --forcing ./forcing.csv
+    erucakra run --forcing ./custom_forcing.csv
     erucakra list
     erucakra info ssp126
-    erucakra sensitivity --scenario ssp245 --tf-range 0.5 0.9
+    erucakra sensitivity --scenario ssp245 --tf-min 0.5 --tf-max 0.9
 """
 
 import sys
@@ -30,11 +31,7 @@ from erucakra.utils.config import load_config, DEFAULT_CONFIG
 
 @click.group()
 @click.version_option(version=__version__, prog_name="erucakra")
-@click.option("--verbose", "-v", is_flag=True, help="Enable verbose output")
-@click.option("--debug", is_flag=True, help="Enable debug output")
-@click.option("--config", type=click.Path(), help="Config file path")
-@click.pass_context
-def main(ctx, verbose, debug, config):
+def main():
     """
     erucakra - Climate Tipping Point Dynamics Toy Model
     
@@ -44,13 +41,15 @@ def main(ctx, verbose, debug, config):
     The critical threshold z_crit is computed from forcing data,
     controlled by --threshold-fraction.
     """
-    ctx.ensure_object(dict)
-    ctx.obj["config"] = load_config(config)
-    ctx.obj["verbose"] = verbose
-    ctx.obj["debug"] = debug
+    pass
 
 
 @main.command("run")
+@click.option(
+    "--config", "-c",
+    type=click.Path(exists=True),
+    help="Config YAML file (can specify forcing_file, model params, etc.)",
+)
 @click.option(
     "--scenario", "-s",
     type=click.Choice(["ssp126", "ssp245", "ssp370", "ssp585"]),
@@ -69,37 +68,38 @@ def main(ctx, verbose, debug, config):
 @click.option(
     "--output-dir", "-o",
     type=click.Path(),
-    default="./outputs",
-    help="Output directory (default: ./outputs)",
+    default=None,
+    help="Output directory (default: from config or ./outputs)",
 )
 @click.option(
     "--outputs",
     type=click.Choice(["csv", "netcdf", "gif", "png"]),
     multiple=True,
-    default=["csv", "netcdf", "gif", "png"],
-    help="Output formats (default: all)",
+    default=None,
+    help="Output formats (default: from config)",
 )
 @click.option(
     "--threshold-fraction", "-tf",
     type=float,
-    default=0.7,
-    help="Fraction of max forcing for z_crit computation (default: 0.7). Lower = tips earlier.",
+    default=None,
+    help="Fraction of max forcing for z_crit computation. Lower = tips earlier.",
 )
 @click.option(
     "--t-end",
     type=float,
-    default=600.0,
-    help="End time (normalized). Default: 600.0",
+    default=None,
+    help="End time (normalized).",
 )
 @click.option(
     "--n-points",
     type=int,
-    default=48000,
-    help="Number of output points. Default: 48000",
+    default=None,
+    help="Number of output points.",
 )
 @click.option(
     "--no-noise",
     is_flag=True,
+    default=False,
     help="Disable climate noise",
 )
 @click.option(
@@ -110,7 +110,7 @@ def main(ctx, verbose, debug, config):
 @click.option(
     "--log-dir",
     type=click.Path(),
-    default="./logs",
+    default=None,
     help="Log directory",
 )
 @click.option(
@@ -119,29 +119,91 @@ def main(ctx, verbose, debug, config):
     default=None,
     help="Experiment name for log file",
 )
-@click.pass_context
-def run(ctx, scenario, all_scenarios, forcing, output_dir, outputs, threshold_fraction,
-        t_end, n_points, no_noise, seed, log_dir, experiment_name):
+@click.option(
+    "--verbose", "-v",
+    is_flag=True,
+    help="Enable verbose output",
+)
+@click.option(
+    "--debug",
+    is_flag=True,
+    help="Enable debug output",
+)
+def run(config, scenario, all_scenarios, forcing, output_dir, outputs, threshold_fraction,
+        t_end, n_points, no_noise, seed, log_dir, experiment_name, verbose, debug):
     """Run climate tipping point simulation."""
     from tqdm import tqdm
     import traceback
     
-    config = ctx.obj["config"]
-    verbose = ctx.obj.get("verbose", False)
-    debug = ctx.obj.get("debug", False)
+    # Load config file if provided, otherwise use defaults
+    if config:
+        cfg = load_config(config)
+        config_path = Path(config)
+    else:
+        cfg = DEFAULT_CONFIG.copy()
+        config_path = None
     
+    # =========================================================================
+    # Resolve parameters: CLI args override config, config overrides defaults
+    # =========================================================================
+    
+    # Forcing: CLI --forcing > config forcing_file > CLI --scenario > config default scenario
+    forcing_file = forcing  # CLI takes priority
+    if forcing_file is None:
+        forcing_file = cfg.get("forcing_file")  # Then config
+    
+    # Output directory
+    if output_dir is None:
+        output_dir = cfg.get("outputs", {}).get("base_dir", "./outputs")
     output_dir = Path(output_dir)
-    outputs = list(outputs) if outputs else ["csv", "netcdf", "gif", "png"]
     
+    # Output formats
+    if not outputs:
+        outputs = cfg.get("outputs", {}).get("formats", ["csv", "netcdf", "gif", "png"])
+    else:
+        outputs = list(outputs)
+    
+    # Model parameters from config
+    model_config = cfg.get("model", {})
+    sim_config = cfg.get("simulation", {})
+    
+    # Threshold fraction: CLI > config > default
+    if threshold_fraction is None:
+        threshold_fraction = model_config.get("threshold_fraction", 0.7)
+    
+    # Time end: CLI > config > default
+    if t_end is None:
+        t_end = sim_config.get("t_end", 600.0)
+    
+    # Number of points: CLI > config > default
+    if n_points is None:
+        n_points = sim_config.get("n_points", 48000)
+    
+    # Noise: CLI --no-noise > config > default
+    if no_noise:
+        add_noise = False
+    else:
+        add_noise = sim_config.get("add_noise", True)
+    
+    # Log directory
+    if log_dir is None:
+        log_dir = cfg.get("logging", {}).get("log_dir", "./logs")
+    
+    # Get scenario metadata from config (for custom forcings)
+    scenario_meta = cfg.get("scenario", {})
+    
+    # Determine experiment name
     if experiment_name is None:
         if all_scenarios:
             experiment_name = "all_scenarios"
         elif scenario:
             experiment_name = scenario
-        elif forcing:
-            experiment_name = Path(forcing).stem
+        elif forcing_file:
+            experiment_name = Path(forcing_file).stem
+        elif scenario_meta.get("key"):
+            experiment_name = scenario_meta["key"]
         else:
-            experiment_name = config["scenarios"]["default"]
+            experiment_name = cfg.get("scenarios", {}).get("default", "ssp245")
     
     level = "DEBUG" if debug else ("INFO" if verbose else "INFO")
     logger = setup_logging(
@@ -167,9 +229,9 @@ def run(ctx, scenario, all_scenarios, forcing, output_dir, outputs, threshold_fr
         start_step("Initialize model")
         
         model = ClimateModel(
-            c=config["model"]["damping"],
-            epsilon=config["model"]["epsilon"],
-            beta=config["model"]["beta"],
+            c=model_config.get("damping", 0.2),
+            epsilon=model_config.get("epsilon", 0.02),
+            beta=model_config.get("beta", 0.8),
             threshold_fraction=threshold_fraction,
         )
         
@@ -185,10 +247,11 @@ def run(ctx, scenario, all_scenarios, forcing, output_dir, outputs, threshold_fr
         
         end_step(success=True)
         
-        # Determine Scenarios
+        # Determine what to run
         start_step("Determine scenarios to run")
         
         scenarios_to_run = []
+        use_custom_forcing = False
         
         if all_scenarios:
             scenarios_to_run = list(SCENARIOS.keys())
@@ -196,15 +259,25 @@ def run(ctx, scenario, all_scenarios, forcing, output_dir, outputs, threshold_fr
         elif scenario:
             scenarios_to_run = [scenario]
             click.echo(f"\nRunning scenario: {scenario}")
-        elif forcing:
+        elif forcing_file:
+            # Custom forcing from CLI or config
             scenarios_to_run = ["custom"]
-            click.echo(f"\nUsing custom forcing: {forcing}")
+            use_custom_forcing = True
+            click.echo(f"\nUsing custom forcing: {forcing_file}")
         else:
-            default_scenario = config["scenarios"]["default"]
+            default_scenario = cfg.get("scenarios", {}).get("default", "ssp245")
             scenarios_to_run = [default_scenario]
             click.echo(f"\nRunning default scenario: {default_scenario}")
         
         end_step(success=True)
+        
+        # Get simulation parameters from config
+        initial_state = sim_config.get("initial_state", [0.05, 0.0, 0.3])
+        noise_level = sim_config.get("noise_level", 0.03)
+        noise_smoothing = sim_config.get("noise_smoothing", 15.0)
+        rtol = sim_config.get("rtol", 1e-10)
+        atol = sim_config.get("atol", 1e-12)
+        method = sim_config.get("method", "RK45")
         
         # Run Simulations
         for scenario_key in tqdm(scenarios_to_run, desc="Processing scenarios"):
@@ -214,11 +287,16 @@ def run(ctx, scenario, all_scenarios, forcing, output_dir, outputs, threshold_fr
             try:
                 click.echo(f"\n{'─' * 60}")
                 
-                if scenario_key == "custom":
-                    click.echo(f"  Processing: Custom Forcing")
+                if scenario_key == "custom" and use_custom_forcing:
+                    # Use custom forcing file
+                    custom_name = scenario_meta.get("name", "Custom Forcing")
+                    custom_subtitle = scenario_meta.get("subtitle", "")
+                    click.echo(f"  Processing: {custom_name}")
+                    if custom_subtitle:
+                        click.echo(f"  {custom_subtitle}")
                     
                     start_step("Load custom forcing")
-                    times, values = load_forcing_csv(forcing)
+                    times, values = load_forcing_csv(forcing_file)
                     end_step(success=True)
                     
                     results = model.run(
@@ -226,12 +304,37 @@ def run(ctx, scenario, all_scenarios, forcing, output_dir, outputs, threshold_fr
                         forcing_times=times,
                         t_end=t_end,
                         n_points=n_points,
-                        add_noise=not no_noise,
+                        initial_state=tuple(initial_state),
+                        add_noise=add_noise,
+                        noise_level=noise_level,
+                        noise_smoothing=noise_smoothing,
+                        rtol=rtol,
+                        atol=atol,
+                        method=method,
                         seed=seed,
                         show_progress=True,
                     )
-                    base_name = Path(forcing).stem
+                    
+                    # Inject custom scenario metadata into results
+                    if scenario_meta.get("name"):
+                        viz_config = cfg.get("visualization", {})
+                        results.scenario_info = {
+                            "name": scenario_meta.get("name", "Custom"),
+                            "subtitle": scenario_meta.get("subtitle", ""),
+                            "description": scenario_meta.get("description", ""),
+                            "expected_outcome": scenario_meta.get("expected_outcome", "N/A"),
+                            "color_primary": viz_config.get("color_primary", "#00FFFF"),
+                            "color_secondary": viz_config.get("color_secondary", "#FFFFFF"),
+                            "color_trajectory": viz_config.get("color_trajectory", "#00FFFF"),
+                            "color_forcing": viz_config.get("color_forcing", "#88FF00"),
+                            "cmap_name": viz_config.get("cmap_name", "viridis"),
+                        }
+                        results.scenario_key = scenario_meta.get("key", "custom")
+                    
+                    base_name = scenario_meta.get("key") or Path(forcing_file).stem
+                    
                 else:
+                    # Use built-in scenario
                     info = get_scenario(scenario_key)
                     
                     click.echo(f"  Processing: {info['name']}")
@@ -241,7 +344,13 @@ def run(ctx, scenario, all_scenarios, forcing, output_dir, outputs, threshold_fr
                         scenario=scenario_key,
                         t_end=t_end,
                         n_points=n_points,
-                        add_noise=not no_noise,
+                        initial_state=tuple(initial_state),
+                        add_noise=add_noise,
+                        noise_level=noise_level,
+                        noise_smoothing=noise_smoothing,
+                        rtol=rtol,
+                        atol=atol,
+                        method=method,
                         seed=seed,
                         show_progress=True,
                     )
@@ -342,6 +451,7 @@ def list_scenarios():
     click.echo("\nExamples:")
     click.echo("  erucakra run --scenario ssp245 --threshold-fraction 0.6  # More sensitive")
     click.echo("  erucakra run --scenario ssp245 --threshold-fraction 0.85 # Less sensitive")
+    click.echo("  erucakra run --config ./configs/custom.yaml              # Use config file")
     click.echo()
 
 
@@ -407,14 +517,13 @@ def info(scenario):
     default="./logs",
     help="Log directory",
 )
-@click.pass_context
-def sensitivity(ctx, scenario, tf_min, tf_max, n_samples, output_dir, log_dir):
+def sensitivity(scenario, tf_min, tf_max, n_samples, output_dir, log_dir):
     """Run sensitivity analysis over threshold_fraction values."""
     import numpy as np
     import pandas as pd
     import traceback
     
-    config = ctx.obj["config"]
+    config = DEFAULT_CONFIG.copy()
     
     logger = setup_logging(
         level="INFO",

@@ -1,0 +1,286 @@
+# =============================================================================
+# erucakra Configuration Template
+# =============================================================================
+# Climate Tipping Point Dynamics Model - Custom Configuration
+#
+# This template allows you to define custom simulations with your own forcing
+# data and parameters. Copy this file and modify as needed.
+#
+# Usage:
+#   erucakra run --config ./configs/my_config.yaml
+#
+# Priority Order (highest to lowest):
+#   1. Command-line arguments (e.g., --threshold-fraction 0.6)
+#   2. Values in this config file
+#   3. Built-in defaults
+#
+# =============================================================================
+
+
+# =============================================================================
+# FORCING DATA
+# =============================================================================
+# Specify a custom forcing file (CSV format) to use instead of built-in SSP
+# scenarios. When set, this overrides the scenario setting below.
+#
+# CSV Format Requirements:
+#   - Column 1: time (year, e.g., 1750, 1800, 2000, 2100)
+#   - Column 2: forcing (W/m², effective radiative forcing)
+#   - Header row required: "time,forcing"
+#   - Lines starting with # are treated as comments
+#
+# Path Resolution:
+#   - Relative paths are resolved relative to THIS config file's location
+#   - Absolute paths work as expected
+#
+# Example CSV:
+#   time,forcing
+#   1750,0.3
+#   1850,0.5
+#   1950,1.2
+#   2000,2.5
+#   2050,4.0
+#   2100,5.5
+#
+# Uncomment and set your forcing file:
+# forcing_file: ./my_forcing.csv
+
+
+# =============================================================================
+# SCENARIO SELECTION (used when forcing_file is not set)
+# =============================================================================
+# Built-in SSP scenarios from IPCC AR6:
+#   - ssp126: SSP1-2.6 Sustainability (low emissions)
+#   - ssp245: SSP2-4.5 Middle Road (moderate emissions)
+#   - ssp370: SSP3-7.0 Regional Rivalry (high emissions)
+#   - ssp585: SSP5-8.5 Fossil Development (very high emissions)
+
+scenarios:
+  default: ssp245
+
+
+# =============================================================================
+# SCENARIO METADATA (for custom forcings)
+# =============================================================================
+# When using a custom forcing_file, you can provide metadata that will appear
+# in output files and visualizations. This section is optional.
+
+scenario:
+  # Short identifier (used in filenames)
+  key: null
+  
+  # Full name (appears in plot titles)
+  name: null
+  
+  # Subtitle (appears below title)
+  subtitle: null
+  
+  # Longer description (stored in NetCDF metadata)
+  description: null
+  
+  # Expected outcome: STABLE, MARGINAL, TIPPING, CATASTROPHIC, HYSTERESIS
+  expected_outcome: null
+
+
+# =============================================================================
+# MODEL PARAMETERS
+# =============================================================================
+# These control the dynamical system behavior:
+#
+#   dx/dt = y
+#   dy/dt = x(z - z_crit - x²) - c·y
+#   dz/dt = ε(A(t)/A_scale - z - β·x²)
+#
+# Where:
+#   x = fast climate variability (interannual oscillations)
+#   y = rate of change / momentum
+#   z = slow accumulated forcing (ocean heat, ice sheets)
+#   A(t) = time-dependent radiative forcing
+#   z_crit = critical threshold (computed from threshold_fraction)
+
+model:
+  # -------------------------------------------------------------------------
+  # damping (c): Energy dissipation rate
+  # -------------------------------------------------------------------------
+  # Controls how quickly oscillations decay.
+  # - Higher values: faster decay, less oscillation
+  # - Lower values: more persistent oscillations
+  # Typical range: 0.1 - 0.5
+  # Default: 0.2
+  damping: 0.2
+  
+  # -------------------------------------------------------------------------
+  # epsilon (ε): Timescale separation ratio
+  # -------------------------------------------------------------------------
+  # Ratio of slow (z) to fast (x,y) dynamics.
+  # - Smaller values: z changes very slowly, stronger hysteresis
+  # - Larger values: z responds faster to forcing changes
+  # Typical range: 0.01 - 0.05
+  # Default: 0.02
+  epsilon: 0.02
+  
+  # -------------------------------------------------------------------------
+  # beta (β): Feedback strength
+  # -------------------------------------------------------------------------
+  # Coupling from variability (x²) to accumulation (z).
+  # - Higher values: oscillations reduce effective forcing
+  # - Lower values: weaker feedback
+  # Typical range: 0.5 - 1.5
+  # Default: 0.8
+  beta: 0.8
+  
+  # -------------------------------------------------------------------------
+  # threshold_fraction: Controls tipping sensitivity
+  # -------------------------------------------------------------------------
+  # z_crit is computed as: threshold_fraction × max(A_normalized)
+  #
+  # This determines WHEN the system tips relative to peak forcing:
+  # - Lower values (0.4-0.6): Tips earlier, more sensitive
+  # - Default (0.7): Moderate sensitivity
+  # - Higher values (0.8-0.95): Tips later, less sensitive
+  #
+  # The system tips when z crosses z_crit (pitchfork bifurcation).
+  # Default: 0.7
+  threshold_fraction: 0.7
+
+
+# =============================================================================
+# SIMULATION PARAMETERS
+# =============================================================================
+# Control the numerical integration and output resolution.
+
+simulation:
+  # -------------------------------------------------------------------------
+  # Time Range (normalized units)
+  # -------------------------------------------------------------------------
+  # The model uses normalized time where:
+  #   year = 2020 + t × 0.8
+  #
+  # So t=0 corresponds to year 2020, t=600 to year 2500.
+  # For forcing starting at 1750: use t_start = -337.5
+  # Default range covers 2020-2500.
+  t_start: 0.0
+  t_end: 600.0
+  
+  # -------------------------------------------------------------------------
+  # Output Resolution
+  # -------------------------------------------------------------------------
+  # Number of time points in output. Higher = smoother but larger files.
+  # Default: 48000 (~80 points per year)
+  n_points: 48000
+  
+  # -------------------------------------------------------------------------
+  # Initial State [x₀, y₀, z₀]
+  # -------------------------------------------------------------------------
+  # Starting point in phase space.
+  # - x₀: Initial variability (small positive value recommended)
+  # - y₀: Initial momentum (usually 0)
+  # - z₀: Initial accumulated state (should be below z_crit)
+  # Default: [0.05, 0.0, 0.3]
+  initial_state: [0.05, 0.0, 0.3]
+  
+  # -------------------------------------------------------------------------
+  # Climate Noise
+  # -------------------------------------------------------------------------
+  # Adds realistic internal variability (red noise) to the fast variable.
+  # Disable (false) for cleaner hysteresis loops or bifurcation analysis.
+  add_noise: true
+  
+  # Noise amplitude (standard deviation)
+  # Typical range: 0.01 - 0.1
+  noise_level: 0.03
+  
+  # Temporal smoothing (correlation length)
+  # Higher = redder (more autocorrelated) noise
+  noise_smoothing: 15.0
+  
+  # -------------------------------------------------------------------------
+  # ODE Solver Settings
+  # -------------------------------------------------------------------------
+  # Relative tolerance (affects accuracy vs speed)
+  rtol: 1.0e-10
+  
+  # Absolute tolerance
+  atol: 1.0e-12
+  
+  # Integration method: RK45 (default), RK23, DOP853, Radau, BDF, LSODA
+  method: RK45
+
+
+# =============================================================================
+# OUTPUT CONFIGURATION
+# =============================================================================
+
+outputs:
+  # -------------------------------------------------------------------------
+  # Output Formats
+  # -------------------------------------------------------------------------
+  # Which file types to generate:
+  #   - csv: Full data table (readable, large)
+  #   - netcdf: CF-compliant NetCDF4 (compressed, with metadata)
+  #   - png: Time series diagnostic plot
+  #   - gif: Animated 3D phase space visualization
+  formats:
+    - csv
+    - netcdf
+    - gif
+    - png
+  
+  # -------------------------------------------------------------------------
+  # Output Directory
+  # -------------------------------------------------------------------------
+  # Where to save outputs. Subdirectories are created for each format.
+  # Relative paths are relative to current working directory (not config file).
+  base_dir: ./outputs
+
+
+# =============================================================================
+# VISUALIZATION SETTINGS
+# =============================================================================
+# Customize colors and appearance of plots and animations.
+
+visualization:
+  # -------------------------------------------------------------------------
+  # Colors (hex format)
+  # -------------------------------------------------------------------------
+  # color_primary: Main trajectory color
+  # color_secondary: Accent/highlight color
+  # color_trajectory: Phase space trajectory
+  # color_forcing: Forcing line in plots
+  color_primary: "#00E5CC"
+  color_secondary: "#00FF88"
+  color_trajectory: "#00FFFF"
+  color_forcing: "#88FF00"
+  
+  # -------------------------------------------------------------------------
+  # Colormap
+  # -------------------------------------------------------------------------
+  # Matplotlib colormap for time-colored trajectories.
+  # Options: viridis, plasma, inferno, magma, twilight, coolwarm, etc.
+  cmap_name: viridis
+  
+  # -------------------------------------------------------------------------
+  # Resolution
+  # -------------------------------------------------------------------------
+  # DPI for PNG output
+  timeseries_dpi: 200
+  
+  # GIF settings
+  gif_fps: 30
+  gif_duration: 12  # seconds
+  gif_dpi: 100
+
+
+# =============================================================================
+# LOGGING
+# =============================================================================
+
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR
+  level: INFO
+  
+  # Directory for log files
+  log_dir: ./logs
+  
+  # Format style: detailed, simple, minimal
+  format_style: detailed
