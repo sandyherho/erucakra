@@ -24,6 +24,12 @@ def write_netcdf(
     Creates a CF-compliant NetCDF4 file with full metadata including
     the computed critical threshold z_crit and forcing scale A_scale.
     
+    Time is stored in multiple formats:
+    - year: Integer year (2020, 2021, etc.)
+    - year_decimal: Decimal year (2020.5 = mid-2020)
+    - month: Month of year (1-12)
+    - time_normalized: Model's internal normalized time
+    
     Parameters
     ----------
     results : SimulationResults
@@ -46,8 +52,18 @@ def write_netcdf(
     if compression:
         comp_kwargs = {"zlib": True, "complevel": compression_level}
     
+    # Compute time arrays
+    year_decimal = results.year
+    year_int = np.floor(year_decimal).astype(np.int32)
+    month = ((year_decimal % 1) * 12 + 1).astype(np.int32)
+    month = np.clip(month, 1, 12)
+    day_of_year = ((year_decimal % 1) * 365 + 1).astype(np.int32)
+    day_of_year = np.clip(day_of_year, 1, 365)
+    
     with nc.Dataset(filepath, "w", format="NETCDF4") as ds:
+        # =====================================================================
         # Global attributes
+        # =====================================================================
         ds.title = "Climate Tipping Point Model Simulation"
         ds.institution = "erucakra"
         ds.source = "erucakra climate tipping point model v0.0.1"
@@ -86,26 +102,55 @@ def write_netcdf(
         if diag.get("first_crossing_year"):
             ds.first_crossing_year = diag["first_crossing_year"]
         
+        # =====================================================================
         # Dimensions
+        # =====================================================================
         n_time = len(results.t)
         ds.createDimension("time", n_time)
         
-        # Calendar year
+        # =====================================================================
+        # Time Variables - Multiple formats for convenience
+        # =====================================================================
+        
+        # Integer year (2020, 2021, etc.)
         year_var = ds.createVariable("year", "i4", ("time",), **comp_kwargs)
         year_var.units = "year"
-        year_var.long_name = "Calendar year"
-        year_var.calendar = "proleptic_gregorian"
-        year_var.standard_name = "time"
-        year_var[:] = results.real_year
+        year_var.long_name = "Calendar year (integer)"
+        year_var.standard_name = "year"
+        year_var[:] = year_int
         
-        # Normalized time
+        # Decimal year (2020.5 = mid-2020)
+        year_dec_var = ds.createVariable("year_decimal", "f8", ("time",), **comp_kwargs)
+        year_dec_var.units = "year"
+        year_dec_var.long_name = "Decimal year (fractional)"
+        year_dec_var.comment = "2020.5 represents mid-2020 (approximately July 1)"
+        year_dec_var[:] = year_decimal
+        
+        # Month (1-12)
+        month_var = ds.createVariable("month", "i2", ("time",), **comp_kwargs)
+        month_var.units = "1"
+        month_var.long_name = "Month of year"
+        month_var.valid_range = np.array([1, 12], dtype=np.int16)
+        month_var[:] = month.astype(np.int16)
+        
+        # Day of year (1-365)
+        doy_var = ds.createVariable("day_of_year", "i2", ("time",), **comp_kwargs)
+        doy_var.units = "1"
+        doy_var.long_name = "Day of year"
+        doy_var.valid_range = np.array([1, 365], dtype=np.int16)
+        doy_var[:] = day_of_year.astype(np.int16)
+        
+        # Normalized time (model internal)
         time_var = ds.createVariable("time_normalized", "f8", ("time",), **comp_kwargs)
         time_var.units = "normalized_time_units"
         time_var.long_name = "Normalized simulation time"
-        time_var.comment = "t_norm = (year - 2020) / 0.8"
+        time_var.comment = "Model internal time; year = 2020 + t * 0.8"
         time_var[:] = results.t
         
-        # State variables
+        # =====================================================================
+        # State Variables
+        # =====================================================================
+        
         x_var = ds.createVariable("x_variability", "f8", ("time",), **comp_kwargs)
         x_var.units = "1"
         x_var.long_name = "Climate variability (fast variable)"
@@ -125,14 +170,16 @@ def write_netcdf(
         z_var.comment = f"Tipping occurs when z > z_crit = {results.z_crit:.3f} (computed)"
         z_var[:] = results.z
         
-        # Forcing
+        # =====================================================================
+        # Forcing Variables
+        # =====================================================================
+        
         A_var = ds.createVariable("A_forcing", "f8", ("time",), **comp_kwargs)
         A_var.units = "W m-2"
         A_var.long_name = "Effective radiative forcing"
         A_var.standard_name = "toa_incoming_shortwave_flux"
         A_var[:] = results.A
         
-        # Normalized forcing
         A_norm_var = ds.createVariable("A_normalized", "f8", ("time",), **comp_kwargs)
         A_norm_var.units = "1"
         A_norm_var.long_name = "Normalized radiative forcing"
@@ -140,7 +187,10 @@ def write_netcdf(
         A_norm_var.scale_factor_used = results.A_scale
         A_norm_var[:] = results.A_normalized
         
-        # Derived quantities
+        # =====================================================================
+        # Derived Quantities
+        # =====================================================================
+        
         warm_var = ds.createVariable("warming_proxy", "f8", ("time",), **comp_kwargs)
         warm_var.units = "K"
         warm_var.long_name = "Warming proxy (approximate temperature anomaly)"
@@ -150,6 +200,7 @@ def write_netcdf(
         vel_var = ds.createVariable("phase_velocity", "f8", ("time",), **comp_kwargs)
         vel_var.units = "1/time"
         vel_var.long_name = "Phase space velocity magnitude"
+        vel_var.comment = "sqrt(x^2 + y^2)"
         vel_var[:] = results.velocity
         
         dist_var = ds.createVariable("distance_to_threshold", "f8", ("time",), **comp_kwargs)
@@ -159,7 +210,10 @@ def write_netcdf(
         dist_var.threshold_value = results.z_crit
         dist_var[:] = results.distance_to_threshold
         
-        # Binary regime flag
+        # =====================================================================
+        # Regime Classification
+        # =====================================================================
+        
         regime_var = ds.createVariable("regime", "i2", ("time",), **comp_kwargs)
         regime_var.units = "1"
         regime_var.long_name = "Climate regime flag"
@@ -167,5 +221,14 @@ def write_netcdf(
         regime_var.flag_meanings = "not_tipped tipped"
         regime_var.threshold = results.z_crit
         regime_var[:] = np.where(results.z > results.z_crit, 1, 0).astype(np.int16)
+        
+        above_var = ds.createVariable("above_threshold", "i2", ("time",), **comp_kwargs)
+        above_var.units = "1"
+        above_var.long_name = "Above tipping threshold flag"
+        above_var.flag_values = np.array([0, 1], dtype=np.int16)
+        above_var.flag_meanings = "below above"
+        above_var[:] = (results.z > results.z_crit).astype(np.int16)
     
-    logger.info(f"NetCDF written: {n_time} time steps, z_crit={results.z_crit:.3f} (computed)")
+    logger.info(f"NetCDF written: {n_time} time steps, "
+                f"years {year_int[0]}-{year_int[-1]}, "
+                f"z_crit={results.z_crit:.3f}")

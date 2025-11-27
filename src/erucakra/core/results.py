@@ -22,7 +22,7 @@ class SimulationResults:
     t : NDArray
         Normalized time array.
     year : NDArray
-        Calendar year array.
+        Calendar year array (decimal).
     x : NDArray
         Climate variability (fast variable).
     y : NDArray
@@ -119,9 +119,27 @@ class SimulationResults:
         return self.diagnostics.get("first_crossing_year")
     
     @property
+    def year_int(self) -> NDArray[np.int32]:
+        """Integer calendar year."""
+        return np.floor(self.year).astype(np.int32)
+    
+    @property
+    def month(self) -> NDArray[np.int32]:
+        """Month of year (1-12)."""
+        m = ((self.year % 1) * 12 + 1).astype(np.int32)
+        return np.clip(m, 1, 12)
+    
+    @property
+    def day_of_year(self) -> NDArray[np.int32]:
+        """Day of year (1-365)."""
+        d = ((self.year % 1) * 365 + 1).astype(np.int32)
+        return np.clip(d, 1, 365)
+    
+    # Keep real_year as alias for backward compatibility
+    @property
     def real_year(self) -> NDArray[np.int64]:
-        """Real calendar year as integer."""
-        return np.round(self.year).astype(np.int64)
+        """Real calendar year as integer (deprecated, use year_int)."""
+        return self.year_int.astype(np.int64)
     
     def summary(self) -> Dict[str, Any]:
         """Generate summary statistics."""
@@ -141,8 +159,8 @@ class SimulationResults:
             "tipped": self.tipped,
             "first_crossing_year": self.first_crossing_year,
             "max_variability": self.diagnostics.get("max_variability", float(np.max(np.abs(self.x)))),
-            "year_start": int(np.round(self.year[0])),
-            "year_end": int(np.round(self.year[-1])),
+            "year_start": int(self.year_int[0]),
+            "year_end": int(self.year_int[-1]),
             "n_points": len(self.t),
         }
     
@@ -165,6 +183,7 @@ class SimulationResults:
         for idx in up_indices:
             events.append({
                 "year": float(self.year[idx]),
+                "year_int": int(self.year_int[idx]),
                 "direction": "up",
                 "z_before": float(self.z[idx]),
                 "z_after": float(self.z[idx + 1]),
@@ -176,6 +195,7 @@ class SimulationResults:
         for idx in down_indices:
             events.append({
                 "year": float(self.year[idx]),
+                "year_int": int(self.year_int[idx]),
                 "direction": "down",
                 "z_before": float(self.z[idx]),
                 "z_after": float(self.z[idx + 1]),
@@ -188,21 +208,34 @@ class SimulationResults:
         return events
     
     def to_dataframe(self):
-        """Convert results to pandas DataFrame."""
+        """Convert results to pandas DataFrame with proper time columns."""
         import pandas as pd
         
         return pd.DataFrame({
-            "year": self.real_year,
+            # Time columns
+            "year": self.year_int,
+            "year_decimal": self.year,
+            "month": self.month,
+            "day_of_year": self.day_of_year,
             "time_normalized": self.t,
+            
+            # State variables
             "x_variability": self.x,
             "y_momentum": self.y,
             "z_accumulated": self.z,
+            
+            # Forcing
             "A_forcing_Wm2": self.A,
             "A_normalized": self.A_normalized,
+            
+            # Derived quantities
             "warming_proxy_celsius": self.warming,
             "distance_to_threshold": self.distance_to_threshold,
             "phase_velocity": self.velocity,
+            
+            # Regime
             "regime": self.regime,
+            "above_threshold": (self.z > self.z_crit).astype(int),
         })
     
     def to_csv(
@@ -294,7 +327,7 @@ class SimulationResults:
         status = "TIPPED" if self.tipped else "NOT_TIPPED"
         return (
             f"SimulationResults(scenario='{name}', "
-            f"years={int(np.round(self.year[0]))}-{int(np.round(self.year[-1]))}, "
+            f"years={self.year_int[0]}-{self.year_int[-1]}, "
             f"threshold_fraction={self.threshold_fraction:.2f}, "
             f"z_crit={self.z_crit:.3f}, max_z={self.max_z:.3f}, "
             f"status={status})"
