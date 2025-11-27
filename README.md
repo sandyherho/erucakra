@@ -1,7 +1,7 @@
-# `erucakra`: A dynamical system toy model for analyzing climate tipping points under various SSP scenarios
+# `erucakra`: A physically-motivated toy model for analyzing climate tipping points under various SSP scenarios
 
 [![PyPI version](https://badge.fury.io/py/erucakra.svg)](https://badge.fury.io/py/erucakra)
-[![Python](https://img.shields.io/pypi/pyversions/erucakra.svg)](https://pypi.org/project/erucakra/)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![NumPy](https://img.shields.io/badge/numpy-%23013243.svg?logo=numpy&logoColor=white)](https://numpy.org/)
@@ -14,44 +14,49 @@
 
 The model describes climate system dynamics through a three-variable ordinary differential equation system exhibiting bifurcation behavior:
 
-$$\frac{dx}{dt} = y$$
+```
+dx/dt = y
 
-$$\frac{dy}{dt} = x(z - z_{crit} - x^2) - cy$$
+dy/dt = x(z - z_crit - x²) - cy
 
-$$\frac{dz}{dt} = \varepsilon \left( \frac{A(t)}{A_{scale}} - z - \beta x^2 \right)$$
+dz/dt = ε(A(t)/A_scale - z - βx²)
+```
 
 ### Variables
 
 | Symbol | Description |
 |--------|-------------|
-| $x$ | Fast climate variability (interannual oscillations, e.g., ENSO-like modes) |
-| $y$ | Rate of change of $x$ (momentum/velocity in phase space) |
-| $z$ | Slow accumulated forcing state (ocean heat content, ice sheet mass proxy) |
-| $A(t)$ | Time-dependent radiative forcing (W/m²) from SSP scenarios |
+| `x` | Fast climate variability (interannual oscillations, e.g., ENSO-like modes) |
+| `y` | Rate of change of `x` (momentum/velocity in phase space) |
+| `z` | Slow accumulated forcing state (ocean heat content, ice sheet mass proxy) |
+| `A(t)` | Time-dependent radiative forcing (W/m²) from SSP scenarios |
 
 ### Parameters
 
 | Symbol | Description | Default |
 |--------|-------------|---------|
-| $c$ | Damping coefficient controlling oscillation decay rate | 0.2 |
-| $\varepsilon$ | Timescale separation ratio (slow/fast dynamics) | 0.02 |
-| $\beta$ | Feedback strength from variability to accumulation | 0.8 |
-| $z_{crit}$ | Critical threshold for tipping (computed from forcing) | auto |
-| $A_{scale}$ | Forcing normalization scale (W/m²) | scenario-dependent |
+| `c` | Damping coefficient controlling oscillation decay rate | 0.2 |
+| `ε` | Timescale separation ratio (slow/fast dynamics) | 0.02 |
+| `β` | Feedback strength from variability to accumulation | 0.8 |
+| `z_crit` | Critical threshold for tipping (computed from forcing) | auto |
+| `A_scale` | Forcing normalization scale (W/m²) | scenario-dependent |
 
 ### Threshold Computation
 
-The critical threshold $z\_{crit}$ is computed from forcing data:
+The critical threshold `z_crit` is computed from forcing data:
 
-$$z\_{crit} = \text{threshold\_fraction} \times \max\left(\frac{A(t)}{A_{scale}}\right)$$
+```
+z_crit = threshold_fraction × max(A(t) / A_scale)
+```
 
-where threshold fraction (default 0.7) controls tipping sensitivity—lower values trigger earlier tipping.
+where `threshold_fraction` (default 0.7) controls tipping sensitivity—lower values trigger earlier tipping.
 
 ### Tipping Dynamics
 
-The system undergoes a pitchfork bifurcation when $z$ crosses $z_{crit}$:
-- $z < z_{crit}$: Single stable equilibrium at $x = 0$ (stable climate)
-- $z > z_{crit}$: Bistable regime with equilibria at $x = \pm\sqrt{z - z_{crit}}$ (tipped state)
+The system undergoes a pitchfork bifurcation when `z` crosses `z_crit`:
+
+- **z < z_crit**: Single stable equilibrium at `x = 0` (stable climate)
+- **z > z_crit**: Bistable regime with equilibria at `x = ±√(z - z_crit)` (tipped state)
 
 ## Installation
 
@@ -177,4 +182,4 @@ results = model.run(forcing=values, forcing_times=times)
 
 ## License
 
-MIT License © 2025 Sandy H. S. Herho
+MIT License © 2024 Sandy H. S. Herho
