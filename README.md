@@ -1,13 +1,11 @@
-# erucakra
-
-**Climate Tipping Point Dynamics** - A physically-motivated dynamical systems model for analyzing climate tipping points under various SSP scenarios.
+# `erucakra`: A physically-motivated dynamical system toy model for analyzing climate tipping points under various SSP scenarios
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 
 ## Overview
 
-**erucakra** (from Sanskrit एरुचक्र "wind wheel") is a Python library for simulating and analyzing climate tipping point dynamics using a physically-motivated three-variable dynamical system. The model demonstrates:
+**erucakra**  is a Python library for simulating and analyzing climate tipping point dynamics using a physically-motivated three-variable dynamical system. The model demonstrates:
 
 - Tipping point behavior in climate subsystems
 - Hysteresis and irreversibility  
@@ -17,7 +15,6 @@
 ## Physical Model
 
 The core dynamical system:
-
 ```
 dx/dt = y
 dy/dt = x(z - z_crit - x²) - cy
@@ -31,13 +28,11 @@ Where:
 - **A(t)**: Time-dependent effective radiative forcing (W/m²)
 
 ## Installation
-
 ```bash
 pip install erucakra
 ```
 
 Or with Poetry:
-
 ```bash
 poetry add erucakra
 ```
@@ -47,31 +42,26 @@ poetry add erucakra
 ### Command Line Interface
 
 Run a simulation with default SSP2-4.5 scenario:
-
 ```bash
 erucakra run --scenario ssp245
 ```
 
 Run all SSP scenarios:
-
 ```bash
 erucakra run --all-scenarios
 ```
 
 Use custom forcing file:
-
 ```bash
 erucakra run --forcing ./forcings/my_forcing.csv --output-dir ./results
 ```
 
 Specify output formats:
-
 ```bash
 erucakra run --scenario ssp585 --outputs csv netcdf gif png
 ```
 
 ### Python API
-
 ```python
 from erucakra import ClimateModel, scenarios
 from erucakra.forcing import load_forcing_csv
@@ -99,12 +89,14 @@ results = model.run(forcing=forcing)
 | `ssp245` | SSP2-4.5: Middle Road | Moderate mitigation, emissions peak ~2040 |
 | `ssp370` | SSP3-7.0: Regional Rivalry | Delayed fragmented action |
 | `ssp585` | SSP5-8.5: Fossil Development | No significant mitigation |
-| `overshoot` | Overshoot & Return | Net-zero with temporary threshold exceedance |
+
+## Forcing Data
+
+The model uses IPCC AR6-based radiative forcing data from 1750 to 2500. Forcing files are provided in CSV format in the `forcings/` directory.
 
 ## Custom Forcing Files
 
 Create a CSV file with columns `time` (years from 1750) and `forcing` (W/m²):
-
 ```csv
 time,forcing
 0,0.0
@@ -124,7 +116,6 @@ time,forcing
 ## Configuration
 
 Default configuration in `~/.erucakra/config.yaml`:
-
 ```yaml
 scenarios:
   default: ssp245
@@ -137,8 +128,8 @@ model:
   
 simulation:
   t_start: 0
-  t_end: 150
-  n_points: 12000
+  t_end: 600
+  n_points: 48000
   add_noise: true
   noise_level: 0.03
   

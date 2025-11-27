@@ -12,7 +12,6 @@ scenarios:
     - ssp245   # SSP2-4.5: Middle Road
     - ssp370   # SSP3-7.0: Regional Rivalry
     - ssp585   # SSP5-8.5: Fossil Development
-    - overshoot  # Overshoot & Return
 
 model:
   # Damping coefficient (energy dissipation)
@@ -30,8 +29,8 @@ model:
 simulation:
   # Time parameters
   t_start: 0.0
-  t_end: 150.0  # ~120 years (2020-2140)
-  n_points: 12000
+  t_end: 600.0  # ~480 years (2020-2500)
+  n_points: 48000
   
   # Initial state [x, y, z]
   initial_state: [0.05, 0.0, 0.3]

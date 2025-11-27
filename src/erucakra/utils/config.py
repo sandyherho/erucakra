@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_CONFIG: Dict[str, Any] = {
     "scenarios": {
         "default": "ssp245",
-        "available": ["ssp126", "ssp245", "ssp370", "ssp585", "overshoot"],
+        "available": ["ssp126", "ssp245", "ssp370", "ssp585"],
     },
     "model": {
         "damping": 0.2,
@@ -21,8 +21,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     },
     "simulation": {
         "t_start": 0.0,
-        "t_end": 150.0,
-        "n_points": 12000,
+        "t_end": 600.0,
+        "n_points": 48000,
         "initial_state": [0.05, 0.0, 0.3],
         "add_noise": True,
         "noise_level": 0.03,

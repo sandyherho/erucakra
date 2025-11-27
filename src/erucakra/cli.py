@@ -46,7 +46,7 @@ def main(ctx, verbose, debug, config):
 @main.command("run")
 @click.option(
     "--scenario", "-s",
-    type=click.Choice(["ssp126", "ssp245", "ssp370", "ssp585", "overshoot"]),
+    type=click.Choice(["ssp126", "ssp245", "ssp370", "ssp585"]),
     help="Built-in scenario to run",
 )
 @click.option(
@@ -75,14 +75,14 @@ def main(ctx, verbose, debug, config):
 @click.option(
     "--t-end",
     type=float,
-    default=150.0,
-    help="End time (normalized). Default: 150.0 (~120 years)",
+    default=600.0,
+    help="End time (normalized). Default: 600.0 (~480 years to 2500)",
 )
 @click.option(
     "--n-points",
     type=int,
-    default=12000,
-    help="Number of output points. Default: 12000",
+    default=48000,
+    help="Number of output points. Default: 48000",
 )
 @click.option(
     "--no-noise",

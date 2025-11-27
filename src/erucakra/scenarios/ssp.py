@@ -1,156 +1,88 @@
 """
 SSP (Shared Socioeconomic Pathways) forcing scenarios.
 
-Based on IPCC AR6 WG1 (2021) scenarios:
+Based on IPCC AR6 WG1 (2021) scenarios using CSV forcing data:
 - SSP1-2.6: Sustainability
 - SSP2-4.5: Middle of the Road
 - SSP3-7.0: Regional Rivalry
 - SSP5-8.5: Fossil-fueled Development
-- Overshoot: Net-zero with temporary exceedance
+
+Forcing data extends from 1750 to 2500.
 """
 
-from typing import Dict, Any, List, Callable
+from typing import Dict, Any, List, Callable, Optional
+from pathlib import Path
 import numpy as np
+from scipy.interpolate import interp1d
 
 
-def create_forcing_ssp126(t: float) -> float:
-    """
-    SSP1-2.6: Sustainability Pathway.
+# Path to forcing data files
+FORCING_DIR = Path(__file__).parent.parent.parent.parent / "forcings"
+
+
+def _load_forcing_data(scenario_key: str) -> tuple:
+    """Load forcing data from CSV file."""
+    csv_path = FORCING_DIR / f"{scenario_key}.csv"
+    if not csv_path.exists():
+        raise FileNotFoundError(f"Forcing file not found: {csv_path}")
     
-    Rapid decarbonization starting 2025, net-zero by 2075,
-    peak forcing ~2.6 W/m² then decline.
+    import pandas as pd
+    df = pd.read_csv(csv_path, comment='#')
+    return df['time'].values, df['forcing'].values
+
+
+def create_forcing_from_csv(
+    scenario_key: str,
+    cache: Optional[Dict[str, Callable]] = None,
+) -> Callable[[float], float]:
+    """
+    Create forcing function from CSV data.
     
     Parameters
     ----------
-    t : float
-        Normalized simulation time.
+    scenario_key : str
+        Scenario identifier (e.g., 'ssp126', 'ssp245').
+    cache : dict, optional
+        Cache dictionary for storing interpolators.
     
     Returns
     -------
-    float
-        Forcing value (normalized).
+    Callable
+        Function f(t_normalized) -> forcing_value.
     """
-    year = 2020 + t * 0.8
+    # Use cache if available
+    if cache is not None and scenario_key in cache:
+        return cache[scenario_key]
     
-    if year < 2025:
-        return 0.6 + 0.02 * (year - 2020)
-    elif year < 2050:
-        peak = 0.7
-        return peak + 0.3 * np.sin(np.pi * (year - 2025) / 50)
-    elif year < 2080:
-        return 0.85 - 0.005 * (year - 2050)
-    else:
-        return 0.7
+    times, values = _load_forcing_data(scenario_key)
+    
+    # Convert years from 1750 to normalized time
+    # t_norm = (year - 2020) / 0.8
+    t_norm = (times - 2020) / 0.8
+    
+    interpolator = interp1d(
+        t_norm, values,
+        kind='linear',
+        bounds_error=False,
+        fill_value=(values[0], values[-1]),
+    )
+    
+    def forcing_func(t: float) -> float:
+        return float(interpolator(t))
+    
+    if cache is not None:
+        cache[scenario_key] = forcing_func
+    
+    return forcing_func
 
 
-def create_forcing_ssp245(t: float) -> float:
-    """
-    SSP2-4.5: Middle of the Road.
-    
-    Moderate mitigation efforts, emissions peak around 2040-2050,
-    stabilization at ~4.5 W/m² equivalent.
-    
-    Parameters
-    ----------
-    t : float
-        Normalized simulation time.
-    
-    Returns
-    -------
-    float
-        Forcing value (normalized).
-    """
-    year = 2020 + t * 0.8
-    
-    if year < 2040:
-        return 0.6 + 0.015 * (year - 2020)
-    elif year < 2070:
-        base = 0.9
-        return base + 0.4 * (1 - np.exp(-(year - 2040) / 30))
-    else:
-        return 1.25 + 0.05 * np.sin(0.1 * (year - 2070))
+# Cache for forcing functions
+_forcing_cache: Dict[str, Callable] = {}
 
 
-def create_forcing_ssp370(t: float) -> float:
-    """
-    SSP3-7.0: Regional Rivalry.
-    
-    Delayed and fragmented action, peak emissions around 2070-2080,
-    high forcing with late stabilization.
-    
-    Parameters
-    ----------
-    t : float
-        Normalized simulation time.
-    
-    Returns
-    -------
-    float
-        Forcing value (normalized).
-    """
-    year = 2020 + t * 0.8
-    
-    if year < 2050:
-        return 0.6 + 0.025 * (year - 2020)
-    elif year < 2080:
-        return 1.35 + 0.6 * np.sin(np.pi * (year - 2050) / 60)
-    else:
-        return 1.8 - 0.003 * (year - 2080)
-
-
-def create_forcing_ssp585(t: float) -> float:
-    """
-    SSP5-8.5: Fossil-fueled Development.
-    
-    No significant mitigation, continuous high emissions growth,
-    crosses multiple tipping thresholds.
-    
-    Parameters
-    ----------
-    t : float
-        Normalized simulation time.
-    
-    Returns
-    -------
-    float
-        Forcing value (normalized).
-    """
-    year = 2020 + t * 0.8
-    
-    if year < 2100:
-        return 0.6 + 0.02 * (year - 2020) + 0.0003 * (year - 2020)**1.5
-    else:
-        return 2.8 + 0.1 * np.sin(0.05 * (year - 2100))
-
-
-def create_forcing_overshoot(t: float) -> float:
-    """
-    Overshoot Scenario: Net-Zero with Temporary Exceedance.
-    
-    Delayed action until 2035, aggressive negative emissions after 2060,
-    temporarily exceeds threshold, attempts return.
-    
-    Parameters
-    ----------
-    t : float
-        Normalized simulation time.
-    
-    Returns
-    -------
-    float
-        Forcing value (normalized).
-    """
-    year = 2020 + t * 0.8
-    
-    if year < 2035:
-        return 0.6 + 0.03 * (year - 2020)
-    elif year < 2060:
-        return 1.05 + 0.02 * (year - 2035)
-    elif year < 2090:
-        peak = 1.55
-        return peak - 0.025 * (year - 2060)
-    else:
-        return 0.8
+def _get_forcing_func(scenario_key: str) -> Callable[[float], float]:
+    """Get cached forcing function for scenario."""
+    return create_forcing_from_csv(scenario_key, _forcing_cache)
 
 
 # Scenario configurations
@@ -158,7 +90,7 @@ SCENARIOS: Dict[str, Dict[str, Any]] = {
     "ssp126": {
         "name": "SSP1-2.6: Sustainability",
         "subtitle": 'Strong Mitigation — "Taking the Green Road"',
-        "forcing_func": create_forcing_ssp126,
+        "forcing_func": lambda t: _get_forcing_func("ssp126")(t),
         "color_primary": "#00E5CC",
         "color_secondary": "#00FF88",
         "color_trajectory": "#00FFFF",
@@ -170,7 +102,7 @@ SCENARIOS: Dict[str, Dict[str, Any]] = {
     "ssp245": {
         "name": "SSP2-4.5: Middle Road",
         "subtitle": 'Moderate Action — "Muddling Through"',
-        "forcing_func": create_forcing_ssp245,
+        "forcing_func": lambda t: _get_forcing_func("ssp245")(t),
         "color_primary": "#FFD700",
         "color_secondary": "#FFA500",
         "color_trajectory": "#FFFF00",
@@ -182,7 +114,7 @@ SCENARIOS: Dict[str, Dict[str, Any]] = {
     "ssp370": {
         "name": "SSP3-7.0: Regional Rivalry",
         "subtitle": 'Fragmented Action — "A Rocky Road"',
-        "forcing_func": create_forcing_ssp370,
+        "forcing_func": lambda t: _get_forcing_func("ssp370")(t),
         "color_primary": "#FF6B35",
         "color_secondary": "#FF4444",
         "color_trajectory": "#FF8855",
@@ -194,7 +126,7 @@ SCENARIOS: Dict[str, Dict[str, Any]] = {
     "ssp585": {
         "name": "SSP5-8.5: Fossil Development",
         "subtitle": 'No Mitigation — "Highway to Warming"',
-        "forcing_func": create_forcing_ssp585,
+        "forcing_func": lambda t: _get_forcing_func("ssp585")(t),
         "color_primary": "#FF0066",
         "color_secondary": "#CC0044",
         "color_trajectory": "#FF3388",
@@ -202,18 +134,6 @@ SCENARIOS: Dict[str, Dict[str, Any]] = {
         "cmap_name": "magma",
         "expected_outcome": "CATASTROPHIC",
         "description": "Multiple tipping points crossed — chaotic high-amplitude regime",
-    },
-    "overshoot": {
-        "name": "Overshoot & Return",
-        "subtitle": 'Delayed Net-Zero — "Betting on the Future"',
-        "forcing_func": create_forcing_overshoot,
-        "color_primary": "#AA55FF",
-        "color_secondary": "#7722CC",
-        "color_trajectory": "#CC88FF",
-        "color_forcing": "#00FF00",
-        "cmap_name": "cool",
-        "expected_outcome": "HYSTERESIS",
-        "description": "Tests irreversibility — can we return after crossing threshold?",
     },
 }
 
@@ -262,8 +182,6 @@ def get_scenario(key: str) -> Dict[str, Any]:
         "ssp58.5": "ssp585",
         "ssp5": "ssp585",
         "fossil": "ssp585",
-        "overshoot": "overshoot",
-        "netzero": "overshoot",
     }
     
     if key_lower in key_map:
