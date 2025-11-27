@@ -5,7 +5,7 @@ A physically-motivated dynamical system toy model for analyzing
 climate tipping points under various SSP scenarios.
 """
 
-__version__ = "0.0.2"  # Bumped version for the fix
+__version__ = "0.0.1" 
 
 from erucakra.core.model import ClimateModel
 from erucakra.core.results import SimulationResults
