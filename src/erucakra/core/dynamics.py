@@ -1,16 +1,10 @@
 """
 Core dynamical system equations for climate tipping point model.
 
-The key insight: z_crit must be scaled relative to the forcing A(t),
-not as an absolute threshold.
-
 Physical Model:
     dx/dt = y
     dy/dt = x(z - z_crit - x²) - cy
     dz/dt = ε(A(t)/A_scale - z - βx²)
-
-Where A_scale normalizes forcing to O(1) values, allowing z_crit ~ 1
-to represent a meaningful fraction of maximum forcing.
 """
 
 from typing import Callable, List, Union, Optional
@@ -19,25 +13,31 @@ from numpy.typing import NDArray
 from scipy.ndimage import gaussian_filter1d
 
 
-# Forcing scale factors for each scenario (approximate max forcing)
-# This normalizes A(t) so that z evolves on O(1) scale
+# =============================================================================
+# GLOBAL FORCING SCALE (CRITICAL CHANGE)
+# =============================================================================
+# Use a SINGLE global scale based on SSP5-8.5 peak forcing (~13 W/m²)
+# This ensures all scenarios are normalized consistently
+GLOBAL_A_SCALE = 13.0  # W/m²
+
+
+# New approach: all scenarios use global scale
 FORCING_SCALES = {
-    "ssp126": 3.6,   # Peak ~3.6 W/m²
-    "ssp245": 5.5,   # Stabilizes ~5.4 W/m²
-    "ssp370": 8.5,   # Reaches ~8.2 W/m²
-    "ssp585": 10.5,  # Reaches ~10+ W/m²
-    "custom": 5.0,   # Default for custom forcing
+    "ssp126": GLOBAL_A_SCALE,
+    "ssp245": GLOBAL_A_SCALE,
+    "ssp370": GLOBAL_A_SCALE,
+    "ssp585": GLOBAL_A_SCALE,
+    "custom": GLOBAL_A_SCALE,
 }
 
-# Default z_crit values tuned for each scenario to show expected behavior
-# These represent the fraction of normalized forcing needed to tip
-DEFAULT_Z_CRIT = {
-    "ssp126": 0.95,  # Just above max normalized forcing → STABLE
-    "ssp245": 0.82,  # Near max → MARGINAL  
-    "ssp370": 0.65,  # Below max → TIPPING
-    "ssp585": 0.55,  # Well below max → CATASTROPHIC
-    "custom": 0.80,  # Default
-}
+
+# =============================================================================
+# ABSOLUTE Z_CRIT THRESHOLD
+# =============================================================================
+
+
+DEFAULT_Z_CRIT_ABSOLUTE = 0.55  # Absolute threshold in normalized units
+
 
 
 def climate_tipping_model(
@@ -47,11 +47,11 @@ def climate_tipping_model(
     epsilon: float,
     A_func: Union[Callable[[float], float], float],
     beta: float = 0.8,
-    z_crit: float = 1.0,
-    A_scale: float = 1.0,
+    z_crit: float = DEFAULT_Z_CRIT_ABSOLUTE,
+    A_scale: float = GLOBAL_A_SCALE,
 ) -> List[float]:
     """
-    Climate Tipping Point Dynamical System with proper forcing normalization.
+    Climate Tipping Point Dynamical System with global forcing normalization.
     
     The model equations:
         dx/dt = y
@@ -81,11 +81,11 @@ def climate_tipping_model(
         Higher β = stronger negative feedback from oscillations.
         Default is 0.8.
     z_crit : float, optional
-        Critical threshold for tipping (in normalized units).
-        Default is 1.0.
+        Critical threshold for tipping (absolute value in normalized units).
+        Default is 0.55.
     A_scale : float, optional
-        Forcing normalization scale (W/m²). Divides A(t) to get O(1) values.
-        Default is 1.0 (no scaling).
+        Global forcing normalization scale (W/m²).
+        Default is 13.0 (based on SSP5-8.5 peak).
     
     Returns
     -------
@@ -112,7 +112,7 @@ def climate_tipping_model(
     """
     x, y, z = state
     
-    # Time-dependent or constant forcing (normalized)
+    # Time-dependent or constant forcing (normalized by GLOBAL scale)
     if callable(A_func):
         A_normalized = A_func(t) / A_scale
     else:

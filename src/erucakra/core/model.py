@@ -14,7 +14,8 @@ from erucakra.core.dynamics import (
     add_climate_noise,
     compute_fixed_points,
     FORCING_SCALES,
-    DEFAULT_Z_CRIT,
+    GLOBAL_A_SCALE,
+    DEFAULT_Z_CRIT_ABSOLUTE,
 )
 from erucakra.core.results import SimulationResults
 from erucakra.scenarios import SCENARIOS, get_scenario
@@ -46,7 +47,7 @@ def _get_logging_utils():
 
 class ClimateModel:
     """
-    Climate Tipping Point Model with threshold_fraction-based z_crit computation.
+    Climate Tipping Point Model with absolute z_crit threshold.
     
     A three-variable dynamical system modeling climate tipping points
     with time-dependent radiative forcing from SSP scenarios.
@@ -55,10 +56,14 @@ class ClimateModel:
     crosses the critical threshold z_crit, transitioning from a stable
     single-well potential to a bistable double-well configuration.
     
-    Key Design Principle:
-        z_crit is computed from forcing data characteristics using threshold_fraction,
-        not prescribed per scenario. This ensures the model discovers tipping behavior
-        from physics rather than imposing expected outcomes.
+    Key Design Principle (UPDATED):
+        z_crit is now an ABSOLUTE threshold (default 0.55) applied consistently
+        across all scenarios. Combined with global A_scale normalization (13 W/m²),
+        this ensures:
+        - SSP1-2.6: STABLE (z never reaches threshold)
+        - SSP2-4.5: MARGINAL (z hovers near threshold)
+        - SSP3-7.0: TIPPING (z crosses threshold)
+        - SSP5-8.5: CATASTROPHIC (z far exceeds threshold)
     
     Parameters
     ----------
@@ -75,21 +80,21 @@ class ClimateModel:
         Higher values = stronger negative feedback from x oscillations.
         Typical range: 0.5-1.5. Default is 0.8.
     z_crit : float, optional
-        Critical threshold for tipping. If None (default), z_crit is
-        computed automatically from forcing data using threshold_fraction.
+        Critical threshold for tipping (absolute value).
+        Default is 0.55 (calibrated for global A_scale = 13 W/m²).
     threshold_fraction : float, optional
-        Fraction of max normalized forcing used to compute z_crit.
-        z_crit = threshold_fraction × max(A_normalized)
-        Lower values = tips earlier (more sensitive).
-        Higher values = tips later (less sensitive).
-        Default is 0.7.
+        DEPRECATED. Kept for backward compatibility but ignored when
+        z_crit is set to absolute value. Default is None.
+    use_absolute_threshold : bool, optional
+        If True (default), use absolute z_crit. If False, compute from
+        threshold_fraction (legacy behavior, not recommended).
     
     Attributes
     ----------
     params : dict
         Model parameters.
-    threshold_fraction : float
-        Fraction used for z_crit computation.
+    z_crit_absolute : float
+        Absolute threshold value.
     """
     
     def __init__(
@@ -98,18 +103,37 @@ class ClimateModel:
         epsilon: float = 0.02,
         beta: float = 0.8,
         z_crit: Optional[float] = None,
-        threshold_fraction: float = 0.7,
+        threshold_fraction: Optional[float] = None,
+        use_absolute_threshold: bool = True,
     ):
+        # Determine z_crit value
+        if z_crit is not None:
+            # Explicit z_crit provided
+            effective_z_crit = z_crit
+        elif use_absolute_threshold:
+            # Use default absolute threshold
+            effective_z_crit = DEFAULT_Z_CRIT_ABSOLUTE
+        else:
+            # Legacy mode: will compute from threshold_fraction later
+            effective_z_crit = None
+        
         self.params = {
             "c": c,
             "epsilon": epsilon,
             "beta": beta,
-            "z_crit": z_crit,  # None means auto-compute from threshold_fraction
+            "z_crit": effective_z_crit,
         }
-        self.threshold_fraction = threshold_fraction
+        
+        # Store threshold_fraction for legacy compatibility
+        self.threshold_fraction = threshold_fraction if threshold_fraction is not None else 0.7
+        self.use_absolute_threshold = use_absolute_threshold
+        self.z_crit_absolute = effective_z_crit
+        
         self._validate_params()
+        
+        mode = "absolute" if use_absolute_threshold else "threshold_fraction"
         logger.info(f"Initialized ClimateModel with params: {self.params}, "
-                   f"threshold_fraction={threshold_fraction}")
+                   f"mode={mode}, z_crit={effective_z_crit}")
     
     def _validate_params(self) -> None:
         """Validate model parameters are in physically reasonable ranges."""
@@ -140,26 +164,23 @@ class ClimateModel:
         if z_crit is not None and z_crit <= 0:
             raise ValueError(f"z_crit must be positive, got {z_crit}")
         
-        if not 0 < self.threshold_fraction < 1.5:
-            msg = f"threshold_fraction={self.threshold_fraction} outside typical range (0, 1.5)"
-            logger.warning(msg)
-            issues.append(msg)
-        
         if issues:
             log_calculation_issue(
                 "Parameter validation",
                 "Some parameters outside typical ranges",
-                {"c": c, "epsilon": epsilon, "beta": beta, "z_crit": z_crit,
-                 "threshold_fraction": self.threshold_fraction}
+                {"c": c, "epsilon": epsilon, "beta": beta, "z_crit": z_crit}
             )
     
     def get_A_scale(self, scenario_key: Optional[str] = None) -> float:
-        """Get forcing scale for normalization."""
-        if scenario_key is not None and scenario_key in FORCING_SCALES:
-            return FORCING_SCALES[scenario_key]
-        return FORCING_SCALES.get("custom", 5.0)
+        """
+        Get forcing scale for normalization.
+        
+        UPDATED: Now returns GLOBAL_A_SCALE for all scenarios.
+        """
+        # Always use global scale for consistent normalization
+        return GLOBAL_A_SCALE
     
-    def compute_z_crit(
+    def compute_z_crit_from_fraction(
         self,
         A_func: Callable[[float], float],
         A_scale: float,
@@ -169,6 +190,9 @@ class ClimateModel:
     ) -> tuple:
         """
         Compute z_crit from forcing data using threshold_fraction.
+        
+        DEPRECATED: This method is kept for backward compatibility but
+        should not be used. Use absolute z_crit instead.
         
         Parameters
         ----------
@@ -188,6 +212,8 @@ class ClimateModel:
         tuple
             (z_crit, forcing_analysis_dict)
         """
+        logger.warning("Using deprecated threshold_fraction method for z_crit computation")
+        
         # Sample forcing over the simulation period
         t_sample = np.linspace(t_start, t_end, n_sample)
         A_sample = np.array([A_func(t) for t in t_sample])
@@ -210,6 +236,7 @@ class ClimateModel:
             "A_normalized_min": float(A_normalized_min),
             "threshold_fraction": self.threshold_fraction,
             "z_crit_computed": float(z_crit),
+            "method": "threshold_fraction (DEPRECATED)",
         }
         
         logger.info(f"Computed z_crit = {self.threshold_fraction:.2f} × {A_normalized_max:.3f} = {z_crit:.3f}")
@@ -239,10 +266,9 @@ class ClimateModel:
         threshold_fraction_override: Optional[float] = None,
     ) -> SimulationResults:
         """
-        Run the climate tipping point simulation with comprehensive logging.
+        Run the climate tipping point simulation.
         
-        All steps are timed and logged. Any calculation issues (NaN, Inf, etc.)
-        are detected and logged for debugging.
+        UPDATED: Now uses absolute z_crit with global A_scale by default.
         
         Parameters
         ----------
@@ -279,11 +305,11 @@ class ClimateModel:
         show_progress : bool
             Show progress bars. Default True.
         z_crit_override : float, optional
-            Override computed z_crit with this value.
+            Override z_crit with this value.
         A_scale_override : float, optional
-            Override default A_scale.
+            Override A_scale (not recommended).
         threshold_fraction_override : float, optional
-            Override model's threshold_fraction for this run.
+            DEPRECATED. Use z_crit_override instead.
         
         Returns
         -------
@@ -292,13 +318,6 @@ class ClimateModel:
         """
         # Get logging utilities
         start_step, end_step, log_error, log_calculation_issue = _get_logging_utils()
-        
-        # Use override threshold_fraction if provided
-        effective_threshold_fraction = (
-            threshold_fraction_override 
-            if threshold_fraction_override is not None 
-            else self.threshold_fraction
-        )
         
         # =====================================================================
         # STEP 1: Setup and Parameter Resolution
@@ -312,7 +331,7 @@ class ClimateModel:
             # Determine scenario key for defaults
             scenario_key = scenario if scenario else "custom"
             
-            # Get forcing function first (needed to compute z_crit)
+            # Get forcing function first
             scenario_info = None
             if scenario is not None:
                 scenario_info = get_scenario(scenario)
@@ -329,32 +348,56 @@ class ClimateModel:
             else:
                 raise ValueError("Must provide either scenario or forcing")
             
-            # Get A_scale
+            # Get A_scale (always global now)
             if A_scale_override is not None:
                 A_scale = A_scale_override
+                logger.warning(f"Using A_scale override: {A_scale}")
             else:
                 A_scale = self.get_A_scale(scenario_key)
             
-            # Compute or get z_crit
+            # Determine z_crit
             forcing_analysis = None
             if z_crit_override is not None:
                 z_crit = z_crit_override
                 logger.info(f"Using z_crit override: {z_crit:.3f}")
             elif self.params["z_crit"] is not None:
                 z_crit = self.params["z_crit"]
-                logger.info(f"Using preset z_crit: {z_crit:.3f}")
-            else:
-                # Compute z_crit from forcing data
-                z_crit, forcing_analysis = self.compute_z_crit(
+                logger.info(f"Using absolute z_crit: {z_crit:.3f}")
+            elif threshold_fraction_override is not None:
+                # Legacy mode with override
+                logger.warning("Using deprecated threshold_fraction_override")
+                self.threshold_fraction = threshold_fraction_override
+                z_crit, forcing_analysis = self.compute_z_crit_from_fraction(
                     A_func, A_scale, t_start, t_end
                 )
-                # Update forcing_analysis with effective threshold_fraction
-                if forcing_analysis:
-                    forcing_analysis["threshold_fraction"] = effective_threshold_fraction
-                    z_crit = effective_threshold_fraction * forcing_analysis["A_normalized_max"]
-                    forcing_analysis["z_crit_computed"] = float(z_crit)
+            else:
+                # Fallback to default absolute threshold
+                z_crit = DEFAULT_Z_CRIT_ABSOLUTE
+                logger.info(f"Using default absolute z_crit: {z_crit:.3f}")
+            
+            # Compute forcing analysis for metadata
+            if forcing_analysis is None:
+                t_sample = np.linspace(t_start, t_end, 1000)
+                A_sample = np.array([A_func(t) for t in t_sample])
+                A_normalized = A_sample / A_scale
+                forcing_analysis = {
+                    "A_max": float(np.max(A_sample)),
+                    "A_min": float(np.min(A_sample)),
+                    "A_mean": float(np.mean(A_sample)),
+                    "A_scale": A_scale,
+                    "A_normalized_max": float(np.max(A_normalized)),
+                    "A_normalized_min": float(np.min(A_normalized)),
+                    "z_crit_used": float(z_crit),
+                    "method": "absolute",
+                }
             
             logger.info(f"Using z_crit={z_crit:.3f}, A_scale={A_scale:.2f} W/m²")
+            logger.info(f"Normalized forcing will peak at: {forcing_analysis['A_normalized_max']:.3f}")
+            
+            # Predict outcome
+            predicted_tip = forcing_analysis['A_normalized_max'] > z_crit
+            logger.info(f"Predicted to tip: {predicted_tip} "
+                       f"(max_A_norm={forcing_analysis['A_normalized_max']:.3f} vs z_crit={z_crit:.3f})")
             
             # Time evaluation points
             t_eval = np.linspace(t_start, t_end, n_points)
@@ -634,7 +677,7 @@ class ClimateModel:
                     **self.params,
                     "z_crit_effective": z_crit,
                     "A_scale": A_scale,
-                    "threshold_fraction": effective_threshold_fraction,
+                    "threshold_mode": "absolute" if self.use_absolute_threshold else "fraction",
                 },
                 simulation_params={
                     "t_start": t_start,
@@ -734,19 +777,21 @@ class ClimateModel:
     def sensitivity_analysis(
         self,
         scenario: str,
-        threshold_fraction_range: tuple = (0.5, 0.9),
+        z_crit_range: tuple = (0.3, 0.8),
         n_samples: int = 10,
         **run_kwargs,
     ) -> list:
         """
-        Run sensitivity analysis over threshold_fraction values.
+        Run sensitivity analysis over z_crit values.
+        
+        UPDATED: Now varies absolute z_crit instead of threshold_fraction.
         
         Parameters
         ----------
         scenario : str
             Scenario to analyze.
-        threshold_fraction_range : tuple
-            (min, max) threshold_fraction values to test.
+        z_crit_range : tuple
+            (min, max) z_crit values to test.
         n_samples : int
             Number of samples.
         **run_kwargs
@@ -755,35 +800,31 @@ class ClimateModel:
         Returns
         -------
         list
-            List of (threshold_fraction, SimulationResults) tuples.
+            List of (z_crit, SimulationResults) tuples.
         """
         start_step, end_step, log_error, log_calculation_issue = _get_logging_utils()
         
         start_step(f"Sensitivity analysis: {scenario}")
         
         try:
-            tf_values = np.linspace(
-                threshold_fraction_range[0], 
-                threshold_fraction_range[1], 
-                n_samples
-            )
+            z_crit_values = np.linspace(z_crit_range[0], z_crit_range[1], n_samples)
             results_list = []
             
-            for i, tf in enumerate(tqdm(tf_values, desc="Sensitivity analysis")):
-                logger.debug(f"Running sensitivity sample {i+1}/{n_samples}: threshold_fraction={tf:.3f}")
+            for i, zc in enumerate(tqdm(z_crit_values, desc="Sensitivity analysis")):
+                logger.debug(f"Running sensitivity sample {i+1}/{n_samples}: z_crit={zc:.3f}")
                 
                 try:
                     results = self.run(
                         scenario=scenario,
-                        threshold_fraction_override=tf,
+                        z_crit_override=zc,
                         show_progress=False,
                         **run_kwargs,
                     )
-                    results_list.append((tf, results))
+                    results_list.append((zc, results))
                     
                 except Exception as e:
-                    log_error(e, f"Sensitivity sample threshold_fraction={tf:.3f}")
-                    results_list.append((tf, None))
+                    log_error(e, f"Sensitivity sample z_crit={zc:.3f}")
+                    results_list.append((zc, None))
             
             end_step(success=True)
             return results_list
@@ -794,7 +835,7 @@ class ClimateModel:
             raise
     
     def __repr__(self) -> str:
-        z_crit_str = f"{self.params['z_crit']}" if self.params['z_crit'] else "auto"
+        z_crit_str = f"{self.params['z_crit']:.3f}" if self.params['z_crit'] else "auto"
+        mode = "absolute" if self.use_absolute_threshold else "fraction"
         return (f"ClimateModel(c={self.params['c']}, epsilon={self.params['epsilon']}, "
-                f"beta={self.params['beta']}, z_crit={z_crit_str}, "
-                f"threshold_fraction={self.threshold_fraction})")
+                f"beta={self.params['beta']}, z_crit={z_crit_str}, mode={mode})")
